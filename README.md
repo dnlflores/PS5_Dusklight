@@ -18,6 +18,38 @@ or in a build.
 This is an unofficial port. It is not part of the Dusklight project and is not
 supported by it: please do not take PS5 problems to them.
 
+## Split-screen co-op (this fork)
+
+This fork adds local two-player split-screen. A second Link plays on
+controller 2, and each player gets half of the screen with their own camera.
+The story and the game are unchanged: Player 2 is a companion. Enemies,
+doors, events and cutscenes follow Player 1. Player 2 waits out cutscenes, and
+is brought back next to Player 1 when they get separated.
+
+It is off by default. Turn it on in **Settings → Gameplay → Split-Screen Co-op →
+Two Players**. **Stack Views Top and Bottom** splits the screen the other way.
+On the PS5, controller 2 is the controller of the second user signed in; a
+guest user works.
+
+The change is one patch, `ps5/patches/splitscreen.patch`, applied after the
+console's own by `setup-source.sh`. Once applied, it is described in
+`vendor/dusklight/docs/splitscreen.md`.
+
+| | Seen | Not yet verified |
+| --- | --- | --- |
+| macOS (Apple Silicon) | Both views drawn; Player 2 moving, swinging the sword and following through a stage change; the leash bringing Player 2 back repeatedly; one-player play unchanged with it off. Player 2 was driven by scripted input. | A real second controller |
+| PS5 | | Everything: not built or run on a console yet |
+
+Known limits:
+
+- Frame interpolation is off while two players are on, so both views run at
+  30 fps.
+- The HUD is shared: hearts and the map show on the left half, the action
+  buttons on the right.
+- Boss fights and other scripted cameras move Player 1's camera only.
+- While Player 1 is a wolf or riding, Player 2 is hidden, including during the
+  twilight sections.
+
 ## Status
 
 Tested on one console, on 2026-10-10 and 11, with the GameCube USA disc (GZ2E01).
@@ -178,7 +210,8 @@ Other tools, all in `ps5/tools/`:
 `vendor/dusklight` is a submodule at an upstream revision; nothing of Dusklight is
 copied or forked here. What the console needs changed in Dusklight, Aurora and
 Borealis is three small patches in `ps5/patches/`; Dawn and SDL3 have theirs
-there too.
+there too. This fork's split-screen co-op is one more, `splitscreen.patch`,
+applied after `dusklight.patch`.
 
 A [scheduled workflow](.github/workflows/track-dusklight.yml) runs
 `update-dusklight.sh` every day. If the patches still apply to upstream's newest

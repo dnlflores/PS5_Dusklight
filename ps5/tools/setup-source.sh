@@ -9,6 +9,9 @@
 #
 #   ps5/patches/dusklight.patch  the disc image found in the title's folder (no
 #                                file dialog), and std::atomic_ref for libc++ 18
+#   ps5/patches/splitscreen.patch  split-screen co-op: a second Link on
+#                                controller 2 (docs/splitscreen.md, once applied);
+#                                not console-specific, and off until turned on
 #   ps5/patches/aurora.patch     the console's surface for Dawn, and .dds texture
 #                                replacements saved as sRGB
 #   ps5/patches/borealis.patch   ElfW for a FreeBSD's link.h
@@ -37,5 +40,6 @@ apply() {
     echo "setup-source.sh: applied $2" >&2
 }
 apply "$dusklight" dusklight.patch
+apply "$dusklight" splitscreen.patch
 apply "$dusklight/extern/aurora" aurora.patch
 apply "$dusklight/extern/borealis" borealis.patch

@@ -32,6 +32,7 @@ unapply() {
 }
 unapply "$dusklight/extern/aurora" aurora.patch
 unapply "$dusklight/extern/borealis" borealis.patch
+unapply "$dusklight" splitscreen.patch
 unapply "$dusklight" dusklight.patch
 
 before=$(git -C "$dusklight" rev-parse HEAD)
