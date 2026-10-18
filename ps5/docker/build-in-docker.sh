@@ -44,6 +44,15 @@ clone https://github.com/mihawk-99/PS5_Vulkan.git PS5_Vulkan
 clone "$repo_url" PS5_Dusklight
 git -C $W/PS5_Dusklight checkout -q --detach "$repo_ref"
 git -C $W/PS5_Vulkan checkout -q --detach "$vulkan_ref"
+# The checkout is kept between builds with the patches applied. setup-source.sh
+# skips a patch that is applied already but can't tell an older version of it, so
+# Dusklight's own tree starts clean each time. (Aurora's and Borealis's trees are
+# left; their patches are checked the same way.)
+dusklight=$W/PS5_Dusklight/vendor/dusklight
+if [[ -e $dusklight/.git ]]; then
+    git -C "$dusklight" reset -q --hard
+    git -C "$dusklight" clean -qfd
+fi
 echo "RADV from PS5_Mesa $(sed -n 's/^mesa_revision=\${PS5_MESA_REVISION:-\([0-9a-f]*\)}/\1/p' $W/PS5_Vulkan/tools/build-radv.sh)"
 echo "PS5_Dusklight at $(git -C $W/PS5_Dusklight log --oneline -1)"
 for r in PS5_PayloadSDK PS5_Mesa PS5_Vulkan; do echo "$r at $(git -C $W/$r log --oneline -1)"; done
