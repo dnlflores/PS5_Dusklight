@@ -38,7 +38,7 @@ console's own by `setup-source.sh`. Once applied, it is described in
 | | Seen | Not yet verified |
 | --- | --- | --- |
 | macOS (Apple Silicon) | Both views drawn; Player 2 moving, swinging the sword and following through a stage change; the leash bringing Player 2 back repeatedly; one-player play unchanged with it off. Player 2 was driven by scripted input. | A real second controller |
-| PS5 | | Everything: not built or run on a console yet |
+| PS5 | Built with `ps5/docker/run.sh` (2026-10-18, at the driver and SDK revisions of the v1.0.0 release) and copied to one console | Starting it there; everything on the console |
 
 Known limits:
 
@@ -202,6 +202,7 @@ Other tools, all in `ps5/tools/`:
 | `package-release.sh VERSION` | Packs `dist/PPSA99305/` as a release zip with `SOURCE.txt`, the revision of every part. Refuses if a disc image or a save is in the folder. |
 | `build-triangle.sh` | Builds a one-triangle WebGPU test in the game's place: the first thing to run when Dawn or the driver changes. |
 | `vm.sh TOOL` | From macOS, runs one of the above inside a Lima VM named `ps5`. |
+| `../docker/run.sh` | From macOS with Docker Desktop instead: builds Mihawk's stack and the game in an Ubuntu 26.04 container (LLVM 22) and writes the title folder to `../PS5_Dusklight-ps5build/dist/`. The first run took about 10 minutes on an M-series Mac with 16 cores. |
 | `update-dusklight.sh` | Moves to upstream Dusklight's latest revision and re-applies the patches. |
 | `check-patches.sh` | Says whether the Dawn and SDL3 patches apply to what Aurora now pins. |
 
