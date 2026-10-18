@@ -47,7 +47,7 @@ console's own by `setup-source.sh`. Once applied, it is described in
 | | Seen | Not yet verified |
 | --- | --- | --- |
 | macOS (Apple Silicon) | Both views drawn; Player 2 moving, swinging the sword and following through a stage change; the leash bringing Player 2 back repeatedly; one-player play unchanged with it off. Colours on both outfits and the wolf; Player 2 talking to an NPC and leading, then Player 1 leading again; Player 2 pausing; both players on their own horse. The players were driven by scripted input. | A real second controller on macOS; doors and chests opened by Player 2; Midna and the twilight sections |
-| PS5 | The first version (without colours, leading or horses): built with `ps5/docker/run.sh` on 2026-10-18 and played on one console with two controllers | This version on the console |
+| PS5 | The first version (without colours, leading or horses): built with `ps5/docker/run.sh` on 2026-10-18 and played on one console with two controllers. This version: built the same way on 2026-10-18 and copied to the same console | Playing this version on the console |
 
 Known limits:
 
