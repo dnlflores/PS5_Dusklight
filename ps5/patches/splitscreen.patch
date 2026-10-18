@@ -1,10 +1,10 @@
 diff --git a/docs/splitscreen.md b/docs/splitscreen.md
 new file mode 100644
-index 0000000..3a23e88
+index 0000000..f3d0060
 --- /dev/null
 +++ b/docs/splitscreen.md
-@@ -0,0 +1,120 @@
-+# Split-screen co-op (Companion Link)
+@@ -0,0 +1,164 @@
++# Split-screen co-op
 +
 +A second Link joins on controller 2. Each player gets half of the screen, drawn
 +through their own camera. The story, events and game data are unchanged.
@@ -14,24 +14,46 @@ index 0000000..3a23e88
 +**Stack Views Top and Bottom** (`game.splitScreenTopBottom`) splits the screen
 +horizontally instead of side by side.
 +
-+## What Player 2 can and can't do
++## Each player's colours
 +
-+Player 2 is a full Link: running, climbing, the sword and shield, and items.
-+The game still only knows one "real" player, so Player 2 is a companion:
++The same section has a tunic, skin and wolf-fur colour for each player
++(`game.splitScreenP1Tunic`, `…P1Skin`, `…P1Wolf`, `…P2Tunic`, `…P2Skin`,
++`…P2Wolf`, as `rrggbb`). **Default** leaves that part as the game has it.
++Player 1 starts with the game's own colours. Player 2 starts with a red tunic,
++a darker skin tone and white fur.
 +
-+- **Player 1 owns the world.** Enemies target Player 1. Doors, room loads,
-+  stage changes, events and cutscenes are started only by Player 1. If
-+  Player 2 tries one of these (walking into a loading zone, talking to an
-+  NPC, opening a door), nothing happens, or Player 2 is brought back to
-+  Player 1.
++- **Tunic** is the Hero's tunic and cap, and the green vest of the Ordon
++  clothes at the start of the game.
++- **Skin** is the face, ears, arms and hands.
++- **Wolf fur** is the wolf's coat. The markings stay as they are.
++
++## Who leads
++
++The game knows one "real" player at a time. That player is the **lead**:
++- The NPCs, events, doors, room loads and menus see the lead's Link.
++- Cutscenes play through the lead's camera.
++- Dialogue and the pause menu take the lead's controller.
++
++Player 1 leads when a scene starts. Whoever talks to someone, opens a door or a
++chest, gets an item, or presses Start becomes the lead, until the other player
++does one of those. Each player keeps their own controller and half of the
++screen throughout.
++
 +- **Shared save.** Hearts, rupees, items and progress are the save file's.
-+  Both Links read and spend the same ones.
-+- **Player 2 waits out busy moments.** During cutscenes and events, stage
-+  loads, the pause menus, and while Player 1 is a wolf or riding, Player 2 is
-+  hidden and frozen. Player 2 reappears next to Player 1 afterwards.
-+- **Leash.** If Player 2 is more than 1800 units from Player 1, or in another
-+  room, for 1.5 seconds, or ever more than 4000 units away, Player 2 is removed
-+  and joins again next to Player 1.
++  Both Links read and spend the same ones. Only Player 1's hits cost hearts.
++- **The other player waits out busy moments.** During cutscenes and events,
++  stage loads and the pause menus, the player who isn't leading is hidden and
++  frozen, and the lead's view fills the screen.
++- **Leash.** The player who isn't leading is brought back to the lead if they
++  are apart for 1.5 seconds: more than 1800 units, or in another room.
++  It also happens straight away at more than 4000 units. On horseback the
++  distances are 6000 and 9000. Player 2 is created again next to Player 1;
++  Player 1 is moved to Player 2. Walking into a loading zone as the player who
++  isn't leading does the same.
++- **Wolf form.** Player 2 takes Player 1's form. Only Player 1 transforms,
++  because Midna is with Player 1.
++- **Horses.** Whenever Epona is out, Player 2 gets a horse of their own beside
++  her. Each player rides their own, and the screen stays split.
 +- **No friendly fire.** The Links (and what they throw or shoot) don't hurt each
 +  other, and neither can target, talk to or lock onto the other.
 +
@@ -43,23 +65,32 @@ index 0000000..3a23e88
 +(`dComIfGp_getPlayer(0)`, `daPy_getPlayerActorClass()`,
 +`dComIfGp_getCamera(0)`, `PAD_1`). Instead of changing those call sites, two bits,
 +`g_ctx.player` and `g_ctx.camera`, swap indices 0 and 1 when the tables are
-+read. The swap is on while Player 2's processes run, and while Player 2's view
-+is drawn. Indices that are stored in the tables stay physical and go through
-+the same swap when read.
++read. Indices that are stored in the tables stay physical and go through the
++same swap when read.
 +
-+**Process ownership** (`f_pc_base.cpp`, `f_pc_method.cpp`). Every process
-+created while Player 2's context is on belongs to Player 2 and runs in its
-+context. That covers Player 2's Link, its camera, and its bombs, arrows and
-+boomerang (whatever its Link throws or fires). `fpcMtd_Method` wraps each call in a `ProcessScope`. Removing
-+Player 2 deletes every process it owns. A new Player 2 isn't created until the
-+old one's processes are actually gone.
++**Process ownership** (`f_pc_base.cpp`, `f_pc_method.cpp`). Each player owns
++their Link, their camera and their horse, and whatever those create (bombs,
++arrows, the boomerang). `fpcMtd_Method` wraps each call in a `ProcessScope`.
++That runs a player's process in that player's context and everything else in
++the lead's. So the world sees the lead as slot 0, and each Link always sees
++itself there. Midna is not owned: she goes with the lead. Removing Player 2
++deletes every process they own. A new Player 2 isn't created until the old
++one's processes are actually gone.
++
++**Leading** (`splitscreen.cpp`). `blockEventOrder` (`d_event.cpp`) lets the
++player who isn't leading start their own interactions (talk, door, item,
++treasure, catch and show-item events). Doing so makes them the lead. Anything
++else they would start, such as a fall or a cutscene, is blocked.
++`blockSceneChange` (`d_stage.cpp`) and `blockGlobalChange`
++(`d_com_inf_game.cpp`) keep stage changes, room loads and restart points with
++the lead.
 +
 +**Input** (`m_Do_controller_pad.h`). `MDOCPD_PAD(pad)` remaps the pad index the
-+same way, so Player 2's code reading "pad 1" reads controller 2. Port 2's
-+`JUTGamePad` is created in release builds too.
++same way, so a player's code reading "pad 1" reads their own controller. Port
++2's `JUTGamePad` is created in release builds too.
 +
-+**Its own lock-on.** Player 2 gets a separate `dAttention_c`. It runs and draws
-+in Player 2's context. Neither player's attention lists include the other Link
++**Their own lock-on.** Each player has a `dAttention_c`, which runs and draws in
++that player's context. Neither player's attention lists include the other Link
 +(`d_attention.cpp`). Without that, each camera pulled back to keep the other
 +Link in view.
 +
@@ -71,10 +102,22 @@ index 0000000..3a23e88
 +other's animation, and is left pointing at freed memory when the other is
 +deleted.
 +
++**Colours** (`splitscreen_colors.cpp`). Link's colours are in his textures. On PC
++a material loads its textures at draw time from its packet's texture table
++(`J3DMatPacket::mpTexture`). So each player's Link points its packets at a copy
++of the table. In the copy, the textures that hold the tunic, the skin or the
++fur are recoloured: the colour endpoints of their compressed blocks are
++remapped by hue, keeping the shading. The model data stays shared.
++
++**Horses** (`d_a_horse.cpp`, `d_com_inf_game.h`). Player 2 has a horse slot of
++their own (`mPlayer2HorsePtr`), so the horse lookups in their Link, camera and
++horse find their horse. Their horse doesn't take Epona's saved spot or save
++it.
++
 +**Cameras.** Player 2's camera is a second `camera_process_class` with index 1.
 +Its settings are copied from camera 0's. Camera areas (`d_a_tag_camera.cpp`) are
 +checked for both Links. Only camera 0 sets the shared under-water fog and
-+sound, and only camera 0 is the sound listener.
++sound. The lead's camera is the sound listener.
 +
 +**Drawing** (`m_Do_graphic.cpp`, `d_drawlist.h`). The painter runs once per
 +window:
@@ -88,13 +131,8 @@ index 0000000..3a23e88
 +For window 1, the 3D draw lists are emptied and the scene is entered again
 +through Player 2's camera (`redrawSceneForWindow`). The 2D lists and the HUD
 +keep the first pass's contents. During that second pass, animations, particles
-+and other per-frame work don't advance (`inExtraViewPass`).
-+
-+**Guards.** `blockSceneChange` (`d_stage.cpp`), `blockGlobalChange`
-+(`d_com_inf_game.cpp`) and `blockEventOrder` (`d_event.cpp`) stop Player 2
-+from changing what only Player 1 may change. Player 2's Link doesn't create a
-+second Midna, or the NPCs and hints that come with arriving in a scene
-+(`d_a_alink.cpp`).
++and other per-frame work don't advance (`inExtraViewPass`). When the screen
++isn't split, the one view is the lead's camera.
 +
 +## Known limits
 +
@@ -102,37 +140,44 @@ index 0000000..3a23e88
 +  follows one camera. Both views present at the 30 Hz simulation rate.
 +- **One HUD.** The HUD is drawn once across the whole screen. Hearts and the
 +  map land on the left half and the action buttons on the right. They show the
-+  shared save and Player 1's actions.
-+- **Scripted cameras follow Player 1.** Boss fights and other actors that steer
-+  "the camera" steer Player 1's.
-+- **Wolf form and riding hide Player 2**, including the long twilight sections
-+  where Player 1 is a wolf.
++  shared save and the lead's actions.
++- **Scripted cameras follow the lead.** Boss fights and other actors that steer
++  "the camera" steer the lead's.
++- **Story triggers you walk into** (rather than interact with) only notice the
++  lead.
 +- Two full scene draws per frame cost more GPU time than one.
 +
 +## Testing so far
 +
-+On macOS (Apple Silicon), with Player 2 driven by scripted input:
++On macOS (Apple Silicon), with the players driven by scripted input:
 +
 +- Ordon Village and Ordon Ranch.
-+- Player 2 brought back by the leash repeatedly, about 8 times a minute.
-+- A stage change with Player 2 present.
++- Colours: both outfits and the wolf, for both players.
++- Player 2 talking to an NPC (and leading), Player 1 brought to Player 2, then
++  Player 1 talking and leading again.
++- Both players riding their own horse, including the leash with horses.
++- Player 2 brought back by the leash repeatedly, and a stage change with
++  Player 2 present.
 +- One-player play with the setting off.
++
++The first version (without colours, leading or horses) was also played on a
++PS5 with two controllers.
 +
 +Not yet tested:
 +
-+- A real second controller.
 +- Dungeons, bosses, water, items like the clawshot.
++- Doors and chests opened by Player 2 (they take the same path as talking).
 +- Long sessions.
-+- Any console.
 diff --git a/files.cmake b/files.cmake
-index 18b44da..47a3bd1 100644
+index 18b44da..8186a1b 100644
 --- a/files.cmake
 +++ b/files.cmake
-@@ -1561,6 +1561,9 @@ set(DUSK_FILES
+@@ -1561,6 +1561,10 @@ set(DUSK_FILES
          src/dusk/save_manager.cpp
          src/dusk/save_manager.hpp
          src/dusk/settings.cpp
 +        src/dusk/splitscreen.cpp
++        src/dusk/splitscreen_colors.cpp
 +        src/dusk/splitscreen.h
 +        src/dusk/splitscreen_ctx.h
          src/dusk/speedrun.cpp
@@ -167,7 +212,7 @@ index b2b558a..8e00d5e 100644
  
      inline int create();
 diff --git a/include/d/d_com_inf_game.h b/include/d/d_com_inf_game.h
-index dcf6811..5532491 100644
+index dcf6811..091d022 100644
 --- a/include/d/d_com_inf_game.h
 +++ b/include/d/d_com_inf_game.h
 @@ -20,7 +20,17 @@
@@ -199,7 +244,7 @@ index dcf6811..5532491 100644
      dVibration_c& getVibration() { return mVibration; }
  
      JKRAramArchive* getFieldMapArchive2() { return (JKRAramArchive*)mFieldMapArchive2; }
-@@ -540,60 +552,89 @@ public:
+@@ -540,59 +552,91 @@ public:
          mWindow[i].setMode(mode);
      }
  
@@ -283,35 +328,37 @@ index dcf6811..5532491 100644
 +    void setPlayer(int i, fopAc_ac_c* player) { PLAYERINFO(i).mpPlayer = player; }
 +    int getPlayerCameraID(int i) { return SS_REMAP_CAMERA(PLAYERINFO(i).mCameraID); }
      void setPlayerInfo(int i, fopAc_ac_c* player, int cam) {
--        mPlayerInfo[i].mpPlayer = player;
--        mPlayerInfo[i].mCameraID = cam;
 +        PLAYERINFO(i).mpPlayer = player;
 +        PLAYERINFO(i).mCameraID = SS_REMAP_CAMERA(cam);
-     }
- 
--    void* getPlayerPtr(int ptrIdx) { return mPlayerPtr[ptrIdx]; }
--    void setPlayerPtr(int i, fopAc_ac_c* ptr) { mPlayerPtr[i] = ptr; }
-+    // Index 0 is Link, 1 the horse. Player 2's Link has a slot of its own; the
-+    // horse is shared.
++    }
++
++    // Index 0 is Link, 1 the horse. Player 2 has slots of their own for both.
 +    void* getPlayerPtr(int ptrIdx) {
-+        return (ptrIdx == 0 && SS_SECONDARY()) ? mPlayer2LinkPtr : mPlayerPtr[ptrIdx];
++        if (SS_SECONDARY() && (ptrIdx == 0 || ptrIdx == 1)) {
++            return ptrIdx == 0 ? mPlayer2LinkPtr : mPlayer2HorsePtr;
++        }
++        return mPlayerPtr[ptrIdx];
 +    }
 +    void setPlayerPtr(int i, fopAc_ac_c* ptr) {
-+        if (i == 0 && SS_SECONDARY()) {
-+            mPlayer2LinkPtr = ptr;
++        if (SS_SECONDARY() && (i == 0 || i == 1)) {
++            (i == 0 ? mPlayer2LinkPtr : mPlayer2HorsePtr) = ptr;
 +        } else {
 +            mPlayerPtr[i] = ptr;
 +        }
 +    }
-     daHorse_c* getHorseActor() { return (daHorse_c*)mPlayerPtr[1]; }
- 
++    daHorse_c* getHorseActor() { return (daHorse_c*)getPlayerPtr(1); }
++
 +    // Physical access, for the code that runs both halves of the screen.
 +    camera_class* getCameraPhysical(int idx) { return mCameraInfo[idx].mCamera; }
 +    fopAc_ac_c* getPlayerPhysical(int idx) { return mPlayerInfo[idx].mpPlayer; }
 +    void setPlayerInfoPhysical(int i, fopAc_ac_c* player, int cam) {
-+        mPlayerInfo[i].mpPlayer = player;
-+        mPlayerInfo[i].mCameraID = cam;
-+    }
+         mPlayerInfo[i].mpPlayer = player;
+         mPlayerInfo[i].mCameraID = cam;
+     }
+-
+-    void* getPlayerPtr(int ptrIdx) { return mPlayerPtr[ptrIdx]; }
+-    void setPlayerPtr(int i, fopAc_ac_c* ptr) { mPlayerPtr[i] = ptr; }
+-    daHorse_c* getHorseActor() { return (daHorse_c*)mPlayerPtr[1]; }
 +    void setCameraInfoPhysical(int camIdx, camera_class* p_cam, int win, int player1, int player2) {
 +        mCameraInfo[camIdx].mCamera = p_cam;
 +        mCameraInfo[camIdx].field_0x4 = win;
@@ -320,11 +367,11 @@ index dcf6811..5532491 100644
 +        mCameraInfo[camIdx].mCameraAttentionStatus = 0;
 +    }
 +    fopAc_ac_c* getPlayer2LinkPtr() { return mPlayer2LinkPtr; }
-+
++    fopAc_ac_c* getHorsePhysical(int player) { return player == 0 ? mPlayerPtr[1] : mPlayer2HorsePtr; }
+ 
      dMsgObject_c* getMsgObjectClass() { return mItemInfo.mMsgObjectClass; }
      void setMsgObjectClass(dMsgObject_c* obj) { mItemInfo.mMsgObjectClass = obj; }
-     f32 getItemLifeCount() { return mItemInfo.mItemLifeCount; }
-@@ -870,9 +911,9 @@ public:
+@@ -870,9 +914,9 @@ public:
          mMesgCamInfo.mActor[9] = param_10;
      }
  
@@ -337,7 +384,7 @@ index dcf6811..5532491 100644
  
      void setCurrentWindow(dDlst_window_c* i_window) { mCurrentWindow = i_window; }
      void setCurrentView(view_class* i_view) { mCurrentView = i_view; }
-@@ -933,16 +974,22 @@ public:
+@@ -933,16 +977,23 @@ public:
      /* 0x04E0C */ u8 mWindowNum;
      /* 0x04E0D */ s8 mLayerOld;
      /* 0x04E0E */ u16 mStatus;
@@ -356,6 +403,7 @@ index dcf6811..5532491 100644
 +    } mPlayerInfo[2];
      /* 0x04E7C */ fopAc_ac_c* mPlayerPtr[2];  // 0: Player, 1: Horse ; type may be wrong
 +    fopAc_ac_c* mPlayer2LinkPtr;
++    fopAc_ac_c* mPlayer2HorsePtr;
 +    dAttention_c* mPlayer2Attention;
      /* 0x04E84 */ dComIfG_item_info_class mItemInfo;
      /* 0x04FB0 */ dComIfG_MesgCamInfo_c mMesgCamInfo;
@@ -489,6 +537,36 @@ index f63c1c8..a341f20 100644
  
      static DUSK_GAME_DATA JUTGamePad* m_gamePad[4];
      static DUSK_GAME_DATA interface_of_controller_pad m_cpadInfo[4];
+diff --git a/libs/JSystem/include/JSystem/J3DGraphBase/J3DTexture.h b/libs/JSystem/include/JSystem/J3DGraphBase/J3DTexture.h
+index 5b05b08..b882595 100644
+--- a/libs/JSystem/include/JSystem/J3DGraphBase/J3DTexture.h
++++ b/libs/JSystem/include/JSystem/J3DGraphBase/J3DTexture.h
+@@ -68,6 +68,25 @@ public:
+     u8* getImgDataPtr(u16 index) const {
+         return mpImgDataPtr[index];
+     }
++    // Split-screen: a texture table of one player's Link starts as a copy of
++    // the model's (image pointers included: setResTIMG points them at images
++    // outside the table), then takes recoloured copies of some images, which
++    // must stay alive as long as the table.
++    void copyDataPtrs(const J3DTexture& from) {
++        J3D_ASSERT_RANGE(81, from.mNum == mNum);
++        for (u16 i = 0; i < mNum; i++) {
++            mpImgDataPtr[i] = from.mpImgDataPtr[i];
++            mpTlutDataPtr[i] = from.mpTlutDataPtr[i];
++            mpTexObj[i].reset();
++            loadGXTexObj(i);
++        }
++    }
++    void setImgDataPtr(u16 index, u8* data) {
++        J3D_ASSERT_RANGE(81, index < mNum);
++        mpImgDataPtr[index] = data;
++        mpTexObj[index].reset();
++        loadGXTexObj(index);
++    }
+ #endif
+ 
+     void setResTIMG(u16 index, const ResTIMG& timg) {
 diff --git a/src/SSystem/SComponent/c_cc_s.cpp b/src/SSystem/SComponent/c_cc_s.cpp
 index 73b6993..628afea 100644
 --- a/src/SSystem/SComponent/c_cc_s.cpp
@@ -541,18 +619,19 @@ index c759950..c8630d4 100644
  
      field_0xc1 = 0xFF;
 diff --git a/src/d/actor/d_a_alink.cpp b/src/d/actor/d_a_alink.cpp
-index ef4fdca..d194152 100644
+index ef4fdca..155b55f 100644
 --- a/src/d/actor/d_a_alink.cpp
 +++ b/src/d/actor/d_a_alink.cpp
-@@ -56,6 +56,7 @@
+@@ -56,6 +56,8 @@
  #include "dusk/interp/frame_interpolation.h"
  #include "dusk/interp/sight.h"
  #include "dusk/settings.h"
 +#include "dusk/splitscreen.h"
++#include "dusk/splitscreen_colors.h"
  #include "res/Object/Alink.h"
  #include <cstring>
  #include <helpers/string.hpp>
-@@ -5114,12 +5115,20 @@ int daAlink_c::create() {
+@@ -5114,12 +5116,20 @@ int daAlink_c::create() {
      l_jumpTop = 0.0f;
      #endif
  
@@ -573,7 +652,21 @@ index ef4fdca..d194152 100644
  
      if (dStage_stagInfo_GetSaveTbl(dComIfGp_getStage()->getStagInfo()) == dStage_SaveTbl_LV2) {
          if (!dComIfGs_isItemFirstBit(dItemNo_HYLIA_SHIELD_e) && !dComIfGs_isItemFirstBit(dItemNo_SHIELD_e) &&
-@@ -17811,7 +17820,34 @@ int daAlink_c::procGoronRideWait() {
+@@ -17419,6 +17429,13 @@ int daAlink_c::procCrouch() {
+ }
+ 
+ int daAlink_c::procCoMetamorphoseInit() {
++#if TARGET_PC
++    // Split-screen: Midna is with Player 1, and only Player 1 transforms;
++    // Player 2 takes their form.
++    if (dusk::splitscreen::inSecondaryPlayer()) {
++        return 0;
++    }
++#endif
+     int var_r29 = 0;
+ 
+     if (dComIfGp_getEvent()->isOrderOK()) {
+@@ -17811,7 +17828,34 @@ int daAlink_c::procGoronRideWait() {
      return 1;
  }
  
@@ -608,18 +701,52 @@ index ef4fdca..d194152 100644
      loadModelDVD();
  
      if (checkEndResetFlg0(ERFLG0_BOSS_ROOM_WAIT) && getMidnaActor() != NULL) {
-@@ -19480,6 +19516,9 @@ void daAlink_c::initTevCustomColor() {
+@@ -19480,6 +19524,11 @@ void daAlink_c::initTevCustomColor() {
  }
  
  int daAlink_c::draw() {
 +#if TARGET_PC
 +    rebindSharedModelData();
++    // Split-screen: each player's Link in their own colours.
++    dusk::splitscreen::colors::apply(this, dusk::splitscreen::isPlayer2(this) ? 1 : 0);
 +#endif
      if (checkWolf()) {
          g_env_light.settingTevStruct(9, &current.pos, &tevStr);
      } else {
+diff --git a/src/d/actor/d_a_horse.cpp b/src/d/actor/d_a_horse.cpp
+index f3a236f..e33b566 100644
+--- a/src/d/actor/d_a_horse.cpp
++++ b/src/d/actor/d_a_horse.cpp
+@@ -707,7 +707,13 @@ int daHorse_c::create() {
+         m_onRideFlg = &daHorse_c::onRideFlgSubstance;
+         m_offRideFlg = &daHorse_c::offRideFlgSubstance;
+ 
+-        if (daAlink_getAlinkActorClass()->checkHorseStart() || checkStateFlg0(FLG0_UNK_8000) ||
++        if (
++#if TARGET_PC
++            // Split-screen: Player 2's horse stays where it is created, beside
++            // Player 1's; the saved restart point is Player 1's horse's.
++            dusk::splitscreen::inSecondaryPlayer() ||
++#endif
++            daAlink_getAlinkActorClass()->checkHorseStart() || checkStateFlg0(FLG0_UNK_8000) ||
+             (DEBUG && g_horsePosInit) ||
+             strcmp(dComIfGs_getHorseRestartStageName(), "") == 0
+             /* dSv_event_flag_c::M_002 - Cutscene - [cutscene: 2] Met with Ilia (brings horse to
+@@ -3417,6 +3423,12 @@ void daHorse_c::setBoarHit(fopAc_ac_c* param_0, int param_1) {
+ }
+ 
+ void daHorse_c::savePos() {
++#if TARGET_PC
++    // Split-screen: only Player 1's horse is saved.
++    if (dusk::splitscreen::inSecondaryPlayer()) {
++        return;
++    }
++#endif
+     if (this->model != NULL && !checkStateFlg0(FLG0_UNK_8000) && !checkStateFlg0(FLG0_NO_DRAW_WAIT)) {
+         dComIfGs_setHorseRestart(dComIfGp_getStartStageName(), current.pos, shape_angle.y, fopAcM_GetRoomNo(this));
+     }
 diff --git a/src/d/actor/d_a_tag_camera.cpp b/src/d/actor/d_a_tag_camera.cpp
-index e83a067..950925d 100644
+index e83a067..6989c41 100644
 --- a/src/d/actor/d_a_tag_camera.cpp
 +++ b/src/d/actor/d_a_tag_camera.cpp
 @@ -7,6 +7,9 @@
@@ -632,7 +759,7 @@ index e83a067..950925d 100644
  
  namespace {
  bool always_true() {
-@@ -199,7 +202,23 @@ int daTag_Cam_c::create() {
+@@ -199,7 +202,28 @@ int daTag_Cam_c::create() {
      return cPhs_COMPLEATE_e;
  }
  
@@ -640,18 +767,23 @@ index e83a067..950925d 100644
 +// Split-screen: a camera area says which camera the Link inside it gets. It
 +// checks Player 2's Link for Player 2's camera too, or that camera stays on the
 +// stage's default, which in many places is a fixed one that only watches.
- int daTag_Cam_c::execute() {
-+    const int ret = executeForPlayer();
-+    if (dusk::splitscreen::active()) {
-+        dusk::splitscreen::ScopedCtx ctx(1, 1);
-+        executeForPlayer();
++int daTag_Cam_c::execute() {
++    if (!dusk::splitscreen::active()) {
++        return executeForPlayer();
 +    }
++    int ret;
++    {
++        dusk::splitscreen::ScopedCtx ctx(0, 0);
++        ret = executeForPlayer();
++    }
++    dusk::splitscreen::ScopedCtx ctx(1, 1);
++    executeForPlayer();
 +    return ret;
 +}
 +
 +int daTag_Cam_c::executeForPlayer() {
 +#else
-+int daTag_Cam_c::execute() {
+ int daTag_Cam_c::execute() {
 +#endif
      if (fopAcM_GetRoomNo(this) != dComIfGp_roomControl_getStayNo()) {
          return 0;
@@ -805,7 +937,7 @@ index b33a232..e410bf7 100644
      fopCamM_SetBank(i_this, 0);
  
 diff --git a/src/d/d_com_inf_game.cpp b/src/d/d_com_inf_game.cpp
-index 8b3f0bd..c3f4fd0 100644
+index 8b3f0bd..55fd051 100644
 --- a/src/d/d_com_inf_game.cpp
 +++ b/src/d/d_com_inf_game.cpp
 @@ -28,6 +28,7 @@
@@ -816,16 +948,17 @@ index 8b3f0bd..c3f4fd0 100644
  #include "helpers/string.hpp"
  
  #include "m_Do/m_Do_MemCard.h"
-@@ -56,6 +57,8 @@ void dComIfG_play_c::init() {
+@@ -56,6 +57,9 @@ void dComIfG_play_c::init() {
      for (int i = 0; i < ARRAY_SIZE(mPlayerPtr); i++) {
          mPlayerPtr[i] = NULL;
      }
 +    mPlayer2LinkPtr = NULL;
++    mPlayer2HorsePtr = NULL;
 +    mPlayer2Attention = NULL;
  
      if (mItemInfo.mGameoverStatus == 2) {
          dComIfGp_roomControl_initZone();
-@@ -1436,6 +1439,12 @@ stage_arrow_class* dComIfGp_getRoomArrow(int i_roomNo) {
+@@ -1436,6 +1440,12 @@ stage_arrow_class* dComIfGp_getRoomArrow(int i_roomNo) {
  void dComIfGp_setNextStage(char const* i_stage, s16 i_point, s8 i_roomNo, s8 i_layer,
                             f32 i_lastSpeed, u32 i_lastMode, int i_setPoint, s8 i_wipe,
                             s16 i_lastAngle, int param_9, int i_wipeSpeedT) {
@@ -838,7 +971,7 @@ index 8b3f0bd..c3f4fd0 100644
      if (i_layer >= 15) {
          i_layer = -1;
      }
-@@ -4004,6 +4013,12 @@ u32 dComIfGs_getRestartRoomParam() {
+@@ -4004,6 +4014,12 @@ u32 dComIfGs_getRestartRoomParam() {
  }
  
  void dComIfGs_setRestartRoomParam(u32 i_param) {
@@ -851,7 +984,7 @@ index 8b3f0bd..c3f4fd0 100644
      g_dComIfG_gameInfo.info.getRestart().setRoomParam(i_param);
  }
  
-@@ -4012,6 +4027,13 @@ f32 dComIfGs_getLastSceneSpeedF() {
+@@ -4012,6 +4028,13 @@ f32 dComIfGs_getLastSceneSpeedF() {
  }
  
  u32 dComIfGs_getLastSceneMode() {
@@ -865,7 +998,7 @@ index 8b3f0bd..c3f4fd0 100644
      return g_dComIfG_gameInfo.info.getRestart().getLastMode();
  }
  
-@@ -4020,6 +4042,11 @@ s16 dComIfGs_getLastSceneAngleY() {
+@@ -4020,6 +4043,11 @@ s16 dComIfGs_getLastSceneAngleY() {
  }
  
  void dComIfGs_setRestartRoom(const cXyz& i_position, s16 i_angle, s8 i_roomNo) {
@@ -877,7 +1010,7 @@ index 8b3f0bd..c3f4fd0 100644
      g_dComIfG_gameInfo.info.getRestart().setRoom(i_position, i_angle, i_roomNo);
  }
  
-@@ -4064,6 +4091,11 @@ s8 dComIfGs_getTurnRestartRoomNo() {
+@@ -4064,6 +4092,11 @@ s8 dComIfGs_getTurnRestartRoomNo() {
  }
  
  void dComIfGs_setTurnRestart(const cXyz& i_position, s16 i_angle, s8 param_2, u32 i_param) {
@@ -889,7 +1022,7 @@ index 8b3f0bd..c3f4fd0 100644
      g_dComIfG_gameInfo.info.getTurnRestart().set(i_position, i_angle, param_2, i_param);
  }
  
-@@ -4196,6 +4228,11 @@ const char* dComIfGp_getStartStageName() {
+@@ -4196,6 +4229,11 @@ const char* dComIfGp_getStartStageName() {
  }
  
  s16 dComIfGp_getStartStagePoint() {
@@ -899,6 +1032,19 @@ index 8b3f0bd..c3f4fd0 100644
 +    }
 +#endif
      return g_dComIfG_gameInfo.play.getStartStagePoint();
+ }
+ 
+@@ -5319,6 +5357,12 @@ u8 dComIfGp_getItemLifeCountType() {
+ }
+ 
+ void dComIfGp_setItemLifeCount(f32 amount, u8 type) {
++#if TARGET_PC
++    // Split-screen: Player 2's hits do not cost the shared hearts.
++    if (amount < 0.0f && dusk::splitscreen::dropsDamage()) {
++        return;
++    }
++#endif
+     g_dComIfG_gameInfo.play.setItemLifeCount(amount, type);
  }
  
 diff --git a/src/d/d_drawlist.cpp b/src/d/d_drawlist.cpp
@@ -933,7 +1079,7 @@ index d50c050..53ce28c 100644
                                           cXyz& param_2) {
      f32 z_value = -J3DCalcZValue(j3dSys.getViewMtx(), param_2);
 diff --git a/src/d/d_event.cpp b/src/d/d_event.cpp
-index 4200b1e..30664ee 100644
+index 4200b1e..0e1940a 100644
 --- a/src/d/d_event.cpp
 +++ b/src/d/d_event.cpp
 @@ -15,6 +15,9 @@
@@ -951,9 +1097,9 @@ index 4200b1e..30664ee 100644
  s32 dEvt_control_c::order(u16 type, u16 prio, u16 flag, u16 hind, void* requestActor,
                            void* targetActor, s16 id, u8 mapToolId) {
 +#if TARGET_PC
-+    // Split-screen: Player 2 does not start events (talking, doors, chests,
-+    // cutscenes); Player 1 does.
-+    if (dusk::splitscreen::blockEventOrder()) {
++    // Split-screen: the player the world follows starts events; the other
++    // player's own interactions make them that player.
++    if (dusk::splitscreen::blockEventOrder(type)) {
 +        return 0;
 +    }
 +#endif
@@ -1046,7 +1192,7 @@ index d1e175d..73aeacd 100644
      u8 local_50;
      GXColor a_Stack_48;
 diff --git a/src/d/d_s_play.cpp b/src/d/d_s_play.cpp
-index 4bc620d..066d49b 100644
+index 4bc620d..c814cb5 100644
 --- a/src/d/d_s_play.cpp
 +++ b/src/d/d_s_play.cpp
 @@ -62,6 +62,10 @@
@@ -1060,27 +1206,42 @@ index 4bc620d..066d49b 100644
  static int dScnPly_Create(scene_class*);
  static int dScnPly_Delete(dScnPly_c*);
  static int dScnPly_IsDelete(dScnPly_c);
-@@ -688,6 +692,9 @@ static int dScnPly_Draw(dScnPly_c* i_this) {
+@@ -686,8 +690,17 @@ static int dScnPly_Draw(dScnPly_c* i_this) {
+         dPath_Draw();
+         #endif
  
++#if TARGET_PC
++        {
++            // Split-screen: Player 1's lock-on, whoever leads.
++            dusk::splitscreen::ScopedCtx p1(0, dusk::splitscreen::g_ctx.camera);
++            dComIfGp_getAttention()->Draw();
++        }
++        dusk::splitscreen::onScenePlayDraw();
++#else
          dAttention_c* attention = dComIfGp_getAttention();
          attention->Draw();
-+#if TARGET_PC
-+        dusk::splitscreen::onScenePlayDraw();
 +#endif
      }
  
      #if DEBUG
-@@ -824,6 +831,9 @@ static int dScnPly_Execute(dScnPly_c* i_this) {
+@@ -823,7 +836,16 @@ static int dScnPly_Execute(dScnPly_c* i_this) {
+         #endif
  
          dComIfGp_getEvent()->Step();
-         dComIfGp_getAttention()->Run();
 +#if TARGET_PC
++        {
++            // Split-screen: Player 1's lock-on, whoever leads.
++            dusk::splitscreen::ScopedCtx p1(0, 0);
++            dComIfGp_getAttention()->Run();
++        }
 +        dusk::splitscreen::onScenePlayExecute();
++#else
+         dComIfGp_getAttention()->Run();
 +#endif
      }
  
      #if DEBUG
-@@ -859,6 +869,9 @@ static int dScnPly_Delete(dScnPly_c* i_this) {
+@@ -859,6 +881,9 @@ static int dScnPly_Delete(dScnPly_c* i_this) {
      dMpath_c::remove();
      dTres_c::remove();
  
@@ -1090,7 +1251,7 @@ index 4bc620d..066d49b 100644
      dAttention_c* attention = dComIfGp_getAttention();
      attention->~dAttention_c();
      dComIfGp_getVibration().Remove();
-@@ -1540,6 +1553,9 @@ static int phase_4(dScnPly_c* i_this) {
+@@ -1540,6 +1565,9 @@ static int phase_4(dScnPly_c* i_this) {
      dAttention_c* attention = dComIfGp_getAttention();
      JKR_NEW_ARGS (attention) dAttention_c(dComIfGp_getPlayer(0), 0);
      dComIfGp_getVibration().Init();
@@ -1185,59 +1346,81 @@ index cbaa49e..79924a6 100644
  
  bool is_presentation_frame() {
 diff --git a/src/dusk/settings.cpp b/src/dusk/settings.cpp
-index f595544..71c7f8a 100644
+index f595544..6779b51 100644
 --- a/src/dusk/settings.cpp
 +++ b/src/dusk/settings.cpp
-@@ -63,6 +63,10 @@ UserSettings g_userSettings = {
+@@ -63,6 +63,17 @@ UserSettings g_userSettings = {
          .aimingReticle {"game.aimingReticle", false},
          .noHitStun {"game.noHitStun", false},
  
 +        // Split-screen co-op
 +        .splitScreen {"game.splitScreen", false},
 +        .splitScreenTopBottom {"game.splitScreenTopBottom", false},
++        .splitScreenP1Tunic {"game.splitScreenP1Tunic", ""},
++        .splitScreenP1Skin {"game.splitScreenP1Skin", ""},
++        .splitScreenP1Wolf {"game.splitScreenP1Wolf", ""},
++        // Player 2 starts out different: a red tunic, darker skin, a white wolf.
++        .splitScreenP2Tunic {"game.splitScreenP2Tunic", "a83232"},
++        .splitScreenP2Skin {"game.splitScreenP2Skin", "7a5642"},
++        .splitScreenP2Wolf {"game.splitScreenP2Wolf", "e8e6dc"},
 +
          // Preferences
          .enableMirrorMode {"game.enableMirrorMode", false},
          .minimalHUD {"game.minimalHUD", false},
-@@ -298,6 +302,8 @@ void registerSettings() {
+@@ -298,6 +309,14 @@ void registerSettings() {
      Register(g_userSettings.game.aimingReticle);
      Register(g_userSettings.game.noHitStun);
      Register(g_userSettings.game.enableMirrorMode);
 +    Register(g_userSettings.game.splitScreen);
 +    Register(g_userSettings.game.splitScreenTopBottom);
++    Register(g_userSettings.game.splitScreenP1Tunic);
++    Register(g_userSettings.game.splitScreenP1Skin);
++    Register(g_userSettings.game.splitScreenP1Wolf);
++    Register(g_userSettings.game.splitScreenP2Tunic);
++    Register(g_userSettings.game.splitScreenP2Skin);
++    Register(g_userSettings.game.splitScreenP2Wolf);
      Register(g_userSettings.game.invertCameraXAxis);
      Register(g_userSettings.game.invertCameraYAxis);
      Register(g_userSettings.game.invertFirstPersonXAxis);
 diff --git a/src/dusk/settings.h b/src/dusk/settings.h
-index 980bc2b..2875ff6 100644
+index 980bc2b..26a9320 100644
 --- a/src/dusk/settings.h
 +++ b/src/dusk/settings.h
-@@ -228,6 +228,10 @@ struct UserSettings {
+@@ -228,6 +228,17 @@ struct UserSettings {
          ConfigVar<bool> aimingReticle;
          ConfigVar<bool> noHitStun;
  
 +        // Split-screen co-op
 +        ConfigVar<bool> splitScreen;
 +        ConfigVar<bool> splitScreenTopBottom;
++        // Each player's Link colours, as "rrggbb"; empty is the game's own.
++        ConfigVar<std::string> splitScreenP1Tunic;
++        ConfigVar<std::string> splitScreenP1Skin;
++        ConfigVar<std::string> splitScreenP1Wolf;
++        ConfigVar<std::string> splitScreenP2Tunic;
++        ConfigVar<std::string> splitScreenP2Skin;
++        ConfigVar<std::string> splitScreenP2Wolf;
 +
          // Preferences
          ConfigVar<bool> enableMirrorMode;
          ConfigVar<bool> minimalHUD;
 diff --git a/src/dusk/splitscreen.cpp b/src/dusk/splitscreen.cpp
 new file mode 100644
-index 0000000..0d0ff54
+index 0000000..a31edb4
 --- /dev/null
 +++ b/src/dusk/splitscreen.cpp
-@@ -0,0 +1,582 @@
+@@ -0,0 +1,827 @@
 +// Split-screen co-op: Player 2's processes, context and companion rules.
 +// See splitscreen.h and docs/splitscreen.md.
 +
 +#include "dusk/splitscreen.h"
++#include "dusk/splitscreen_colors.h"
 +
 +#include "JSystem/J3DGraphBase/J3DSys.h"
 +#include "JSystem/JKernel/JKRHeap.h"
 +#include "SSystem/SComponent/c_malloc.h"
 +#include "d/actor/d_a_alink.h"
++#include "d/actor/d_a_horse.h"
 +#include "d/actor/d_a_player.h"
 +#include "d/d_attention.h"
 +#include "d/d_bg_s_gnd_chk.h"
@@ -1266,9 +1449,11 @@ index 0000000..0d0ff54
 +namespace {
 +
 +// Player 2 is brought back next to Player 1 past these distances, or after
-+// this long in another room.
++// this long in another room. On horseback the players are allowed further apart.
 +constexpr f32 kLeashDistance = 1800.0f;
 +constexpr f32 kHardLeashDistance = 4000.0f;
++constexpr f32 kRidingLeashDistance = 6000.0f;
++constexpr f32 kRidingHardLeashDistance = 9000.0f;
 +constexpr int kSeparatedFramesLimit = 45;
 +constexpr int kPruneInterval = 60;
 +
@@ -1284,6 +1469,25 @@ index 0000000..0d0ff54
 +constexpr int kPendingDeleteGiveUpFrames = 300;
 +fpc_ProcID s_p2LinkId = kNoProc;
 +fpc_ProcID s_p2CameraId = kNoProc;
++fpc_ProcID s_p2HorseId = kNoProc;
++
++// The lead is the player the world follows: whose Link the NPCs, events,
++// doors, rooms and menus see as "the player", and whose camera shows the
++// cutscenes. It is whoever last talked to someone, opened a door or a chest,
++// got an item or paused (Player 1 when a scene starts). Each player's own
++// processes (their Link, camera, horse, and what those spawn) always run as
++// that player. Processes owned by Player 1: s_ownedP1; by Player 2: s_owned.
++uint8_t s_lead = 0;
++std::unordered_set<fpc_ProcID> s_ownedP1;
++// Context scopes in progress, and the owner (0, 1, or -1 for the world) of
++// the process running now; what a process creates belongs to its owner.
++int s_scopeDepth = 0;
++int s_curOwner = -1;
++bool s_inPass = false;
++bool s_bringPlayer1Requested = false;
++// Whether Player 2's camera is up, worked out once a frame: active() is asked
++// for every process drawn, and looking a process up walks the process list.
++bool s_p2CameraReady = false;
 +
 +bool s_sceneActive = false;
 +bool s_spawnedThisScene = false;
@@ -1300,12 +1504,11 @@ index 0000000..0d0ff54
 +dAttention_c* s_p2Attention = nullptr;
 +
 +// Parts of the per-frame item/HUD state that belong to whichever Link is
-+// running: the button prompts it sets, its oxygen, and the damage it takes.
-+// The live copy is the running player's; the bank holds the other player's.
-+// Player 2's damage is dropped each frame, so it does not empty the shared
-+// hearts (it still knocks Player 2 back).
++// running: the button prompts it sets and its oxygen. The live copy is the
++// running player's; the bank holds the other player's. (Player 2's damage is
++// dropped where it is taken, see dropsDamage(), so it does not empty the
++// shared hearts; it still knocks Player 2 back.)
 +struct Bank {
-+    f32 lifeCount = 0.0f;
 +    int oxygen[5] = {};
 +    std::array<u8, 128> status = {};
 +};
@@ -1318,7 +1521,6 @@ index 0000000..0d0ff54
 +
 +void swapBank() {
 +    dComIfG_item_info_class& info = g_dComIfG_gameInfo.play.mItemInfo;
-+    std::swap(info.mItemLifeCount, s_bank.lifeCount);
 +    std::swap(info.mOxygen, s_bank.oxygen[0]);
 +    std::swap(info.mNowOxygen, s_bank.oxygen[1]);
 +    std::swap(info.mMaxOxygen, s_bank.oxygen[2]);
@@ -1333,7 +1535,6 @@ index 0000000..0d0ff54
 +
 +void initBankFromLive() {
 +    dComIfG_item_info_class& info = g_dComIfG_gameInfo.play.mItemInfo;
-+    s_bank.lifeCount = 0.0f;
 +    s_bank.oxygen[0] = info.mOxygen;
 +    s_bank.oxygen[1] = info.mMaxOxygen;
 +    s_bank.oxygen[2] = info.mMaxOxygen;
@@ -1347,6 +1548,49 @@ index 0000000..0d0ff54
 +        swapBank();
 +    }
 +    g_ctx = to;
++}
++
++int ownerOf(const base_process_class* proc) {
++    if (proc == nullptr) {
++        return -1;
++    }
++    if (!s_owned.empty() && s_owned.count(proc->id) != 0) {
++        return 1;
++    }
++    // Midna goes with the lead, like the rest of the world.
++    if (s_ownedP1.count(proc->id) != 0 && proc->name != fpcNm_MIDNA_e) {
++        return 0;
++    }
++    return -1;
++}
++
++int windowCountNow();
++void setLead(uint8_t lead, const char* why);
++
++// The camera the scene is being drawn for: the half's, while the second half
++// is drawn; otherwise the first half's (Player 1's), or the lead's when the
++// screen is not split.
++uint8_t passCamera() {
++    if (s_inPass) {
++        return s_passCamera;
++    }
++    return windowCountNow() > 1 ? 0 : s_lead;
++}
++
++// The context outside any process: the lead's.
++Ctx topCtx() {
++    return {s_lead, s_inPass ? s_passCamera : s_lead};
++}
++
++void leaveScope(Ctx saved, int savedOwner) {
++    s_scopeDepth--;
++    s_curOwner = savedOwner;
++    // The outermost scope goes back to the lead's context, which may have
++    // changed while it ran.
++    const Ctx to = s_scopeDepth == 0 ? topCtx() : saved;
++    if (to.player != g_ctx.player || to.camera != g_ctx.camera) {
++        switchTo(to);
++    }
 +}
 +
 +bool isCameraProc(const base_process_class* proc) {
@@ -1401,16 +1645,19 @@ index 0000000..0d0ff54
 +    play().mCameraInfo[1].mCameraZoomForcus = play().mCameraInfo[0].mCameraZoomForcus;
 +}
 +
-+cXyz spawnPosition(fopAc_ac_c* p1) {
-+    const s16 back = p1->shape_angle.y + 0x8000;
-+    cXyz pos(p1->current.pos.x + cM_ssin(back) * 90.0f, p1->current.pos.y + 30.0f,
-+             p1->current.pos.z + cM_scos(back) * 90.0f);
++cXyz spawnPosition(fopAc_ac_c* next) {
++    // Behind the Link joined, or beside them, clear of the horse, when they ride.
++    const bool riding = static_cast<daPy_py_c*>(next)->checkRide();
++    const s16 back = next->shape_angle.y + (riding ? 0x4000 : 0x8000);
++    const f32 offset = riding ? 220.0f : 90.0f;
++    cXyz pos(next->current.pos.x + cM_ssin(back) * offset, next->current.pos.y + 30.0f,
++             next->current.pos.z + cM_scos(back) * offset);
 +
 +    dBgS_GndChk gnd;
 +    gnd.SetPos(&pos);
 +    const f32 y = dComIfG_Bgsp().GroundCross(&gnd);
-+    if (y == -G_CM3D_F_INF || std::fabs(y - p1->current.pos.y) > 60.0f) {
-+        return p1->current.pos;
++    if (y == -G_CM3D_F_INF || std::fabs(y - next->current.pos.y) > 60.0f) {
++        return next->current.pos;
 +    }
 +    pos.y = y;
 +    return pos;
@@ -1465,13 +1712,17 @@ index 0000000..0d0ff54
 +    // camera looking for its player, not the lock-on system.
 +    play().setPlayerInfoPhysical(1, NULL, 1);
 +    play().mPlayer2LinkPtr = NULL;
++    play().mPlayer2HorsePtr = NULL;
 +    play().mCameraInfo[1].mCamera = NULL;
 +
 +    s_p2LinkId = kNoProc;
 +    s_p2CameraId = kNoProc;
++    s_p2HorseId = kNoProc;
++    s_p2CameraReady = false;
 +    s_suspended = false;
 +    s_respawnRequested = false;
 +    s_separatedFrames = 0;
++    setLead(0, "Player 2 leaves");
 +}
 +
 +void prune() {
@@ -1482,14 +1733,94 @@ index 0000000..0d0ff54
 +            ++it;
 +        }
 +    }
++    std::erase_if(s_ownedP1, [](fpc_ProcID id) { return !procAlive(id); });
 +}
 +
-+bool player1Busy(fopAc_ac_c* p1) {
-+    daPy_py_c* py = static_cast<daPy_py_c*>(p1);
++void setLead(uint8_t lead, const char* why) {
++    if (lead == s_lead) {
++        return;
++    }
++    s_lead = lead;
++    DuskLog.info("splitscreen: Player {} leads ({})", lead + 1, why);
++    if (s_scopeDepth == 0) {
++        switchTo(topCtx());
++    }
++    // Otherwise the outermost scope switches as it ends.
++}
++
++// Player 1's Link and camera, and from them on what they create.
++void markPlayer1(fopAc_ac_c* p1) {
++    s_ownedP1.insert(fopAcM_GetID(p1));
++    if (camera_class* cam = play().getCameraPhysical(0)) {
++        s_ownedP1.insert(fpcM_GetID(cam));
++    }
++}
++
++// Player 1 cannot be created again (they are the Link the scene made), so
++// when Player 2 leads and they get separated, they are moved to Player 2.
++void bringPlayer1ToLead(fopAc_ac_c* p1, fopAc_ac_c* p2) {
++    const cXyz pos = spawnPosition(p2);
++    ScopedCtx ctx(0, 0);
++    static_cast<daPy_py_c*>(p1)->setPlayerPosAndAngle(&pos, p2->shape_angle.y, TRUE);
++    fopAcM_SetRoomNo(p1, fopAcM_GetRoomNo(p2));
++    if (auto* cam = reinterpret_cast<camera_process_class*>(play().getCameraPhysical(0))) {
++        const s16 back = p2->shape_angle.y + 0x8000;
++        const cXyz center(pos.x, pos.y + 130.0f, pos.z);
++        const cXyz eye(pos.x + cM_ssin(back) * 350.0f, pos.y + 220.0f, pos.z + cM_scos(back) * 350.0f);
++        cam->mCamera.Reset(center, eye);
++    }
++}
++
++bool worldBusy() {
 +    // Paused covers the item and collection menus, whose Link doll uses the
 +    // model data the two Links share.
-+    return dComIfGp_event_runCheck() || dComIfGp_isEnableNextStage() || dComIfGp_isPauseFlag() ||
-+           py->checkWolf() || py->checkRide();
++    return dComIfGp_event_runCheck() || dComIfGp_isEnableNextStage() || dComIfGp_isPauseFlag();
++}
++
++// Player 2's own horse, beside Player 1's, whenever Player 1's is out (not
++// waiting off-screen to be called). It is Player 2's like their Link: it runs in
++// their context, so the horse lookups in it, in their Link and in their camera
++// find it, and it goes with them.
++void updatePlayer2Horse() {
++    auto* p1Horse = static_cast<daHorse_c*>(play().getHorsePhysical(0));
++    const bool p1HorseOut = p1Horse != nullptr && !fpcM_IsCreating(fopAcM_GetID(p1Horse)) &&
++                            !p1Horse->checkStateFlg0(daHorse_c::FLG0_NO_DRAW_WAIT);
++    const bool have = procAlive(s_p2HorseId);
++    auto* p2 = static_cast<daPy_py_c*>(player2());
++    if (!p1HorseOut) {
++        // Not from under Player 2.
++        if (have && procCreated(s_p2HorseId) && (p2 == nullptr || !p2->checkRide())) {
++            fpcM_Delete(fpcM_SearchByID(s_p2HorseId));
++            s_p2HorseId = kNoProc;
++        }
++        return;
++    }
++    if (have) {
++        return;
++    }
++    // On the side Player 2 joins on when Player 1 rides (spawnPosition), a
++    // little further out, so they can get straight on.
++    const s16 side = p1Horse->shape_angle.y + 0x4000;
++    cXyz pos(p1Horse->current.pos.x + cM_ssin(side) * 420.0f, p1Horse->current.pos.y + 50.0f,
++             p1Horse->current.pos.z + cM_scos(side) * 420.0f);
++    dBgS_GndChk gnd;
++    gnd.SetPos(&pos);
++    const f32 y = dComIfG_Bgsp().GroundCross(&gnd);
++    if (y == -G_CM3D_F_INF || std::fabs(y - p1Horse->current.pos.y) > 80.0f) {
++        return;  // no level ground there now; tried again next frame
++    }
++    pos.y = y;
++    const csXyz angle(0, p1Horse->shape_angle.y, 0);
++    ScopedCtx ctx(1, 1);
++    s_p2HorseId = fopAcM_create(fpcNm_HORSE_e, fopAcM_GetParam(p1Horse), &pos, fopAcM_GetRoomNo(p1Horse),
++                                &angle, NULL, -1);
++    DuskLog.info("splitscreen: Player 2's horse ({})", s_p2HorseId);
++}
++
++// Link takes his form (Hylian or wolf) from the save as he is created, so a
++// Player 2 created next to Player 1 matches them.
++bool formsDiffer(fopAc_ac_c* p1, fopAc_ac_c* p2) {
++    return static_cast<daPy_py_c*>(p1)->checkWolf() != static_cast<daPy_py_c*>(p2)->checkWolf();
 +}
 +
 +}  // namespace
@@ -1507,13 +1838,19 @@ index 0000000..0d0ff54
 +}
 +
 +bool active() {
-+    return s_sceneActive && enabled() && !s_suspended && procCreated(s_p2CameraId) &&
-+           play().getCameraPhysical(1) != NULL && player2() != nullptr;
++    return s_sceneActive && enabled() && !s_suspended && s_p2CameraReady && play().getCameraPhysical(1) != NULL &&
++           player2() != nullptr;
 +}
 +
 +int windowCount() {
 +    return active() ? 2 : 1;
 +}
++
++namespace {
++int windowCountNow() {
++    return windowCount();
++}
++}  // namespace
 +
 +float aspectScale() {
 +    if (!active()) {
@@ -1523,14 +1860,19 @@ index 0000000..0d0ff54
 +}
 +
 +void onProcIdMade(fpc_ProcID id) {
-+    if (g_ctx.player != 0) {
++    if (s_curOwner == 1) {
 +        s_owned.insert(id);
++    } else if (s_curOwner == 0) {
++        s_ownedP1.insert(id);
 +    }
 +}
 +
 +void onProcDeleted(fpc_ProcID id) {
 +    if (!s_owned.empty()) {
 +        s_owned.erase(id);
++    }
++    if (!s_ownedP1.empty()) {
++        s_ownedP1.erase(id);
 +    }
 +    if (!s_pendingDelete.empty()) {
 +        s_pendingDelete.erase(id);
@@ -1542,7 +1884,7 @@ index 0000000..0d0ff54
 +}
 +
 +bool isSuspendedProc(const base_process_class* proc) {
-+    return s_suspended && isSecondaryProc(proc);
++    return s_suspended && ownerOf(proc) == (s_lead ^ 1);
 +}
 +
 +bool setInDraw(bool inDraw) {
@@ -1551,45 +1893,47 @@ index 0000000..0d0ff54
 +    return was;
 +}
 +
-+ProcessScope::ProcessScope(const base_process_class* proc) : mSaved(g_ctx), mChanged(false) {
-+    if (s_owned.empty() || proc == nullptr) {
++ProcessScope::ProcessScope(const base_process_class* proc)
++    : mSaved(g_ctx), mSavedOwner(s_curOwner), mChanged(false) {
++    if (s_owned.empty() && s_lead == 0 && s_scopeDepth == 0) {
++        return;  // one player: nothing to switch
++    }
++    mChanged = true;
++    s_scopeDepth++;
++    if (proc == nullptr) {
 +        return;
 +    }
++    // A player's process runs as that player, anything else as the lead.
 +    // Draws use the camera of the half being drawn, except a camera's own
 +    // draw, which always sees itself as camera 0 of its player.
-+    const uint8_t pass = s_passCamera;
++    const int owner = ownerOf(proc);
++    s_curOwner = owner;
++    const uint8_t player = owner >= 0 ? static_cast<uint8_t>(owner) : s_lead;
 +    Ctx to;
-+    if (s_owned.count(proc->id) != 0) {
-+        to.player = 1;
-+        to.camera = (s_inDraw && !isCameraProc(proc)) ? pass : 1;
-+    } else {
-+        to.player = 0;
-+        to.camera = s_inDraw ? (isCameraProc(proc) ? 0 : pass) : 0;
-+    }
++    to.player = player;
++    to.camera = (s_inDraw && !isCameraProc(proc)) ? passCamera() : player;
 +    if (to.player != g_ctx.player || to.camera != g_ctx.camera) {
 +        switchTo(to);
-+        mChanged = true;
 +    }
 +}
 +
 +ProcessScope::~ProcessScope() {
 +    if (mChanged) {
-+        switchTo(mSaved);
++        leaveScope(mSaved, mSavedOwner);
 +    }
 +}
 +
-+ScopedCtx::ScopedCtx(uint8_t player, uint8_t camera) : mSaved(g_ctx), mChanged(false) {
++ScopedCtx::ScopedCtx(uint8_t player, uint8_t camera) : mSaved(g_ctx), mSavedOwner(s_curOwner), mChanged(true) {
++    s_scopeDepth++;
++    s_curOwner = player;
 +    const Ctx to = {player, camera};
 +    if (to.player != g_ctx.player || to.camera != g_ctx.camera) {
 +        switchTo(to);
-+        mChanged = true;
 +    }
 +}
 +
 +ScopedCtx::~ScopedCtx() {
-+    if (mChanged) {
-+        switchTo(mSaved);
-+    }
++    leaveScope(mSaved, mSavedOwner);
 +}
 +
 +void onScenePlayCreate() {
@@ -1597,10 +1941,18 @@ index 0000000..0d0ff54
 +        swapBank();
 +    }
 +    g_ctx = {0, 0};
++    s_p2CameraReady = false;
++    s_lead = 0;
++    s_scopeDepth = 0;
++    s_curOwner = -1;
++    s_inPass = false;
++    s_bringPlayer1Requested = false;
 +    s_owned.clear();
++    s_ownedP1.clear();
 +    s_pendingDelete.clear();
 +    s_p2LinkId = kNoProc;
 +    s_p2CameraId = kNoProc;
++    s_p2HorseId = kNoProc;
 +    s_suspended = false;
 +    s_respawnRequested = false;
 +    s_cooldown = 30;
@@ -1627,6 +1979,9 @@ index 0000000..0d0ff54
 +
 +void onScenePlayDelete() {
 +    s_sceneActive = false;
++    s_p2CameraReady = false;
++    setLead(0, "scene ends");
++    colors::onSceneDelete();
 +    destroyAttention();
 +    s_p2LinkId = kNoProc;
 +    s_p2CameraId = kNoProc;
@@ -1637,11 +1992,12 @@ index 0000000..0d0ff54
 +    if (!s_sceneActive) {
 +        return;
 +    }
-+    s_bank.lifeCount = 0.0f;
++
 +    if (++s_pruneTimer >= kPruneInterval) {
 +        s_pruneTimer = 0;
 +        prune();
 +    }
++    s_p2CameraReady = procCreated(s_p2CameraId);
 +
 +    fopAc_ac_c* p1 = play().getPlayerPhysical(0);
 +    const bool want = enabled() && p1 != nullptr && !fpcM_IsCreating(fopAcM_GetID(p1));
@@ -1654,10 +2010,12 @@ index 0000000..0d0ff54
 +                despawn();
 +            }
 +        }
++        setLead(0, "split-screen off");
 +        return;
 +    }
 +
-+    const bool busy = player1Busy(p1);
++    markPlayer1(p1);
++    const bool busy = worldBusy();
 +
 +    if (!s_pendingDelete.empty()) {
 +        if (++s_pendingDeleteFrames < kPendingDeleteGiveUpFrames) {
@@ -1670,9 +2028,11 @@ index 0000000..0d0ff54
 +
 +    if (!linkAlive) {
 +        // Gone (or never there): start again once Player 1 is free.
++        setLead(0, "Player 2 gone");
 +        if (cameraAlive && procCreated(s_p2CameraId)) {
 +            fpcM_Delete(fpcM_SearchByID(s_p2CameraId));
 +            s_p2CameraId = kNoProc;
++            s_p2CameraReady = false;
 +        }
 +        s_suspended = false;
 +        if (s_cooldown > 0) {
@@ -1692,16 +2052,45 @@ index 0000000..0d0ff54
 +        return;
 +    }
 +
-+    const f32 dist = (p2->current.pos - p1->current.pos).abs();
-+    const bool apart = dist > kLeashDistance || fopAcM_GetRoomNo(p2) != fopAcM_GetRoomNo(p1);
++    // Pausing is the lead's (the menus read the lead's controller), so the
++    // other player pressing Start takes the lead first.
++    const uint8_t other = s_lead ^ 1;
++    if (mDoCPd_c::m_cpadInfo[other == 0 ? PAD_1 : PAD_2].mPressedButtonFlags & PAD_BUTTON_START) {
++        setLead(other, "pause");
++    }
++
++    // The follower is brought back to the lead: Player 2 is created again next
++    // to Player 1; Player 1 is moved to Player 2.
++    fopAc_ac_c* lead = s_lead == 0 ? p1 : p2;
++    fopAc_ac_c* follower = s_lead == 0 ? p2 : p1;
++    const f32 dist = (follower->current.pos - lead->current.pos).abs();
++    const bool riding =
++        static_cast<daPy_py_c*>(p1)->checkRide() || static_cast<daPy_py_c*>(p2)->checkRide();
++    const f32 leash = riding ? kRidingLeashDistance : kLeashDistance;
++    const f32 hardLeash = riding ? kRidingHardLeashDistance : kHardLeashDistance;
++    const bool apart = dist > leash || fopAcM_GetRoomNo(follower) != fopAcM_GetRoomNo(lead);
 +    s_separatedFrames = apart ? s_separatedFrames + 1 : 0;
-+    if (s_respawnRequested || dist > kHardLeashDistance || s_separatedFrames > kSeparatedFramesLimit) {
-+        DuskLog.info("splitscreen: bringing Player 2 back to Player 1 (distance {:.0f}, requested {})",
-+                     dist, s_respawnRequested);
++    const bool separated = dist > hardLeash || s_separatedFrames > kSeparatedFramesLimit;
++    // Player 2 takes Player 1's form (only Player 1 transforms).
++    const bool changeForm = formsDiffer(p1, p2);
++    if (changeForm || (s_lead == 0 && (s_respawnRequested || separated))) {
++        DuskLog.info("splitscreen: bringing Player 2 back to Player 1 (distance {:.0f}, requested {}, form {})",
++                     dist, s_respawnRequested, changeForm);
 +        despawn();
 +        s_cooldown = 2;
 +        return;
 +    }
++    if (s_lead == 1 && (s_bringPlayer1Requested || separated)) {
++        DuskLog.info("splitscreen: bringing Player 1 to Player 2 (distance {:.0f}, requested {})", dist,
++                     s_bringPlayer1Requested);
++        bringPlayer1ToLead(p1, p2);
++        s_bringPlayer1Requested = false;
++        s_separatedFrames = 0;
++    }
++    s_respawnRequested = false;
++    s_bringPlayer1Requested = false;
++
++    updatePlayer2Horse();
 +
 +    if (s_p2Attention != nullptr && procCreated(s_p2CameraId)) {
 +        ScopedCtx ctx(1, 1);
@@ -1760,44 +2149,80 @@ index 0000000..0d0ff54
 +    if (dComIfGp_isPauseFlag()) {
 +        return;
 +    }
-+    play().mAttention.Draw();
++    {
++        ScopedCtx p1(0, g_ctx.camera);
++        play().mAttention.Draw();
++    }
 +    onScenePlayDraw();
 +}
 +
 +bool isPassCamera(const camera_class* camera) {
-+    const camera_class* pass = play().getCameraPhysical(s_passCamera);
++    const camera_class* pass = play().getCameraPhysical(passCamera());
 +    return pass == nullptr || pass == camera;
 +}
 +
 +void beginPass(int window) {
 +    s_passCamera = static_cast<uint8_t>(window);
-+    switchTo({0, s_passCamera});
++    s_inPass = true;
++    switchTo(topCtx());
 +}
 +
 +void endPass() {
 +    s_passCamera = 0;
-+    switchTo({0, 0});
++    s_inPass = false;
++    switchTo(topCtx());
 +}
 +
 +bool isAudioCamera(const camera_class* camera) {
-+    const camera_class* p1cam = play().getCameraPhysical(0);
-+    return p1cam == nullptr || p1cam == camera;
++    const camera_class* leadCam = play().getCameraPhysical(s_lead);
++    return leadCam == nullptr || leadCam == camera;
 +}
 +
++// Whoever is not the lead does not change the scene or the room: Player 2 is
++// created again next to Player 1, Player 1 is moved to Player 2.
 +bool blockSceneChange() {
-+    if (g_ctx.player != 0) {
-+        s_respawnRequested = true;
++    if (g_ctx.player != s_lead) {
++        (g_ctx.player == 1 ? s_respawnRequested : s_bringPlayer1Requested) = true;
 +        return true;
 +    }
 +    return false;
 +}
 +
 +bool blockGlobalChange() {
-+    return g_ctx.player != 0;
++    return g_ctx.player != s_lead;
 +}
 +
-+bool blockEventOrder() {
-+    return g_ctx.player != 0;
++bool blockEventOrder(u16 type) {
++    if (g_ctx.player == s_lead || s_curOwner < 0) {
++        return false;
++    }
++    // A player's own interaction (talking, a door, a chest, an item) makes
++    // them the lead; anything else they would start (a fall, a cutscene) is
++    // left to the lead.
++    switch (type) {
++    case dEvt_type_TALK_e:
++    case dEvt_type_DOOR_e:
++    case dEvt_type_ITEM_e:
++    case dEvt_type_SHOWITEM_X_e:
++    case dEvt_type_SHOWITEM_Y_e:
++    case dEvt_type_CATCH_e:
++    case dEvt_type_TREASURE_e:
++        if (!dComIfGp_event_runCheck()) {
++            setLead(g_ctx.player, "interaction");
++            return false;
++        }
++        return true;
++    default:
++        return true;
++    }
++}
++
++bool dropsDamage() {
++    return s_curOwner == 1;
++}
++
++int lead() {
++    return s_lead;
 +}
 +
 +bool noFriendlyFire(fopAc_ac_c* at, fopAc_ac_c* tg) {
@@ -1805,7 +2230,8 @@ index 0000000..0d0ff54
 +        return false;
 +    }
 +    const auto onTeam = [](fopAc_ac_c* ac) {
-+        return fopAcM_GetName(ac) == fpcNm_ALINK_e || s_owned.count(fopAcM_GetID(ac)) != 0;
++        return fopAcM_GetName(ac) == fpcNm_ALINK_e || s_owned.count(fopAcM_GetID(ac)) != 0 ||
++               s_ownedP1.count(fopAcM_GetID(ac)) != 0;
 +    };
 +    return onTeam(at) && onTeam(tg);
 +}
@@ -1813,10 +2239,10 @@ index 0000000..0d0ff54
 +}  // namespace dusk::splitscreen
 diff --git a/src/dusk/splitscreen.h b/src/dusk/splitscreen.h
 new file mode 100644
-index 0000000..60842a4
+index 0000000..da3965b
 --- /dev/null
 +++ b/src/dusk/splitscreen.h
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,152 @@
 +#pragma once
 +
 +// Split-screen co-op: a second Link on controller 2, with its own camera and
@@ -1893,10 +2319,12 @@ index 0000000..60842a4
 +
 +private:
 +    Ctx mSaved;
++    int mSavedOwner;
 +    bool mChanged;
 +};
 +
-+// Puts an explicit context in place.
++// Puts an explicit context in place; what is created meanwhile belongs to
++// that player.
 +class ScopedCtx {
 +public:
 +    ScopedCtx(uint8_t player, uint8_t camera);
@@ -1906,6 +2334,7 @@ index 0000000..60842a4
 +
 +private:
 +    Ctx mSaved;
++    int mSavedOwner;
 +    bool mChanged;
 +};
 +
@@ -1942,21 +2371,467 @@ index 0000000..60842a4
 +// Whether this camera's draw sets the view used by the current pass.
 +bool isPassCamera(const camera_class* camera);
 +
-+// Whether this camera feeds the sound system (Player 1's always does).
++// Whether this camera feeds the sound system (the lead's does).
 +bool isAudioCamera(const camera_class* camera);
 +
 +// --- Guards ----------------------------------------------------------------
-+// Called where the game would change something only Player 1 may change.
-+// Return true (and do nothing) when Player 2's context is active.
++// Called where the game would change something only the lead (the player the
++// world follows) may change. Return true (and do nothing) when the other
++// player's context is active.
 +
 +bool blockSceneChange();
 +bool blockGlobalChange();
-+bool blockEventOrder();
++// An event the other player orders: their own interactions (talking, doors,
++// chests, items) make them the lead and go ahead; anything else is blocked.
++bool blockEventOrder(u16 type);
++
++// Whether damage taken now is Player 2's, which the shared hearts ignore.
++bool dropsDamage();
++
++// The player the world follows (0 or 1).
++int lead();
 +
 +// Friendly fire between the two Links (and what Player 2 throws or shoots).
 +bool noFriendlyFire(fopAc_ac_c* at, fopAc_ac_c* tg);
 +
 +}  // namespace dusk::splitscreen
+diff --git a/src/dusk/splitscreen_colors.cpp b/src/dusk/splitscreen_colors.cpp
+new file mode 100644
+index 0000000..fbd1d80
+--- /dev/null
++++ b/src/dusk/splitscreen_colors.cpp
+@@ -0,0 +1,402 @@
++// Split-screen: each player's own colours for their Link. See splitscreen_colors.h.
++
++#include "dusk/splitscreen_colors.h"
++
++#include "JSystem/J3DGraphAnimator/J3DModel.h"
++#include "JSystem/J3DGraphAnimator/J3DModelData.h"
++#include "JSystem/J3DGraphBase/J3DTexture.h"
++#include "d/actor/d_a_alink.h"
++#include "dusk/settings.h"
++#include "dusk/splitscreen.h"
++
++#include <algorithm>
++#include <cmath>
++#include <cstring>
++#include <memory>
++#include <optional>
++#include <string>
++#include <vector>
++
++namespace dusk::splitscreen::colors {
++namespace {
++
++// What a texture holds, by its name in Link's models.
++enum class Part { None, Tunic, Skin, Wolf };
++
++Part partOf(const char* name) {
++    if (name == nullptr) {
++        return Part::None;
++    }
++    // The Hero's clothes, and the Ordon clothes' green vest (only their green
++    // is changed, so the shirt and trims stay).
++    static const char* const kTunic[] = {
++        "al_upbody", "al_lowbody", "al_cap", "al_skirt", "bl_upbody", "bl_lowbody",
++    };
++    static const char* const kSkin[] = {
++        "al_face", "al_ear", "al_hand", "bl_skin", "bl_hand", "bl_handL",
++    };
++    for (const char* tunic : kTunic) {
++        if (std::strcmp(name, tunic) == 0) {
++            return Part::Tunic;
++        }
++    }
++    for (const char* skin : kSkin) {
++        if (std::strcmp(name, skin) == 0) {
++            return Part::Skin;
++        }
++    }
++    return std::strcmp(name, "wl_body") == 0 ? Part::Wolf : Part::None;
++}
++
++struct Rgb {
++    float r, g, b;
++};
++
++std::optional<Rgb> parseColor(const std::string& value) {
++    std::string_view hex = value;
++    if (!hex.empty() && hex.front() == '#') {
++        hex.remove_prefix(1);
++    }
++    if (hex.size() != 6) {
++        return std::nullopt;
++    }
++    unsigned channels[3];
++    for (int i = 0; i < 3; i++) {
++        unsigned v = 0;
++        for (int j = 0; j < 2; j++) {
++            const char c = hex[i * 2 + j];
++            v <<= 4;
++            if (c >= '0' && c <= '9') {
++                v |= c - '0';
++            } else if (c >= 'a' && c <= 'f') {
++                v |= c - 'a' + 10;
++            } else if (c >= 'A' && c <= 'F') {
++                v |= c - 'A' + 10;
++            } else {
++                return std::nullopt;
++            }
++        }
++        channels[i] = v;
++    }
++    return Rgb{static_cast<float>(channels[0]), static_cast<float>(channels[1]),
++               static_cast<float>(channels[2])};
++}
++
++// A player's colours; an empty one leaves that part as the game has it.
++struct Palette {
++    std::optional<Rgb> tunic, skin, wolf;
++    std::string key;
++
++    const std::optional<Rgb>& of(Part part) const {
++        static const std::optional<Rgb> kNone;
++        switch (part) {
++        case Part::Tunic:
++            return tunic;
++        case Part::Skin:
++            return skin;
++        case Part::Wolf:
++            return wolf;
++        default:
++            return kNone;
++        }
++    }
++};
++
++Palette paletteFor(int player) {
++    auto& game = getSettings().game;
++    Palette palette;
++    if (!game.splitScreen.getValue()) {
++        return palette;
++    }
++    const std::string tunic = (player == 0 ? game.splitScreenP1Tunic : game.splitScreenP2Tunic).getValue();
++    const std::string skin = (player == 0 ? game.splitScreenP1Skin : game.splitScreenP2Skin).getValue();
++    const std::string wolf = (player == 0 ? game.splitScreenP1Wolf : game.splitScreenP2Wolf).getValue();
++    palette.tunic = parseColor(tunic);
++    palette.skin = parseColor(skin);
++    palette.wolf = parseColor(wolf);
++    palette.key = tunic + "/" + skin + "/" + wolf;
++    return palette;
++}
++
++// --- Recolouring -------------------------------------------------------------
++// Each part's pixels are picked out by hue, saturation and brightness, and
++// mapped to the chosen colour with their shading kept: a pixel of the part's
++// average brightness becomes the chosen colour (scaled down by what the game's
++// lighting adds), darker and lighter ones follow. The averages were measured
++// on the game's own textures with the same selection.
++
++constexpr float kTunicReference = 48.9f;
++constexpr float kSkinReference = 113.3f;
++constexpr float kWolfReference = 63.0f;
++constexpr float kLightingGain = 0.62f;
++
++float smoothstep(float e0, float e1, float x) {
++    const float t = std::clamp((x - e0) / (e1 - e0), 0.0f, 1.0f);
++    return t * t * (3.0f - 2.0f * t);
++}
++
++// 1 inside [lo, hi] degrees, falling to 0 over `soft` degrees either side.
++float hueBand(float hue, float lo, float hi, float soft) {
++    return std::min(smoothstep(lo - soft, lo, hue), 1.0f - smoothstep(hi, hi + soft, hue));
++}
++
++void toHsv(const Rgb& c, float& h, float& s, float& v) {
++    const float r = c.r / 255.0f, g = c.g / 255.0f, b = c.b / 255.0f;
++    const float mx = std::max({r, g, b}), mn = std::min({r, g, b});
++    const float d = mx - mn;
++    v = mx;
++    s = mx > 0.0f ? d / mx : 0.0f;
++    if (d <= 0.0f) {
++        h = 0.0f;
++    } else if (mx == r) {
++        h = 60.0f * std::fmod((g - b) / d + 6.0f, 6.0f);
++    } else if (mx == g) {
++        h = 60.0f * ((b - r) / d + 2.0f);
++    } else {
++        h = 60.0f * ((r - g) / d + 4.0f);
++    }
++}
++
++float partWeight(Part part, const Rgb& c) {
++    float h, s, v;
++    toHsv(c, h, s, v);
++    switch (part) {
++    case Part::Tunic:  // green
++        return hueBand(h, 65.0f, 170.0f, 12.0f) * smoothstep(0.08f, 0.16f, s) * smoothstep(0.03f, 0.08f, v);
++    case Part::Skin:  // warm, neither grey nor vivid, not dark (leather, hair edges)
++        return hueBand(h, 0.0f, 38.0f, 8.0f) * smoothstep(0.08f, 0.15f, s) * (1.0f - smoothstep(0.62f, 0.75f, s)) *
++               smoothstep(0.30f, 0.42f, v);
++    case Part::Wolf:  // the fur; not the green markings, not vivid colours
++        return (1.0f - smoothstep(0.55f, 0.70f, s)) *
++               (1.0f - hueBand(h, 65.0f, 185.0f, 15.0f) * smoothstep(0.15f, 0.25f, s));
++    default:
++        return 0.0f;
++    }
++}
++
++float partReference(Part part) {
++    switch (part) {
++    case Part::Tunic:
++        return kTunicReference;
++    case Part::Skin:
++        return kSkinReference;
++    default:
++        return kWolfReference;
++    }
++}
++
++Rgb recolor(Part part, const Rgb& c, const Rgb& target) {
++    const float w = partWeight(part, c);
++    if (w <= 0.0f) {
++        return c;
++    }
++    const float luma = 0.299f * c.r + 0.587f * c.g + 0.114f * c.b;
++    const float k = kLightingGain * luma / partReference(part);
++    const Rgb mapped{std::min(255.0f, target.r * k), std::min(255.0f, target.g * k), std::min(255.0f, target.b * k)};
++    return Rgb{c.r + (mapped.r - c.r) * w, c.g + (mapped.g - c.g) * w, c.b + (mapped.b - c.b) * w};
++}
++
++Rgb from565(u16 v) {
++    const unsigned r = (v >> 11) & 31, g = (v >> 5) & 63, b = v & 31;
++    return Rgb{static_cast<float>((r << 3) | (r >> 2)), static_cast<float>((g << 2) | (g >> 4)),
++               static_cast<float>((b << 3) | (b >> 2))};
++}
++
++u16 to565(const Rgb& c) {
++    const auto q = [](float x, int bits) {
++        const int max = (1 << bits) - 1;
++        return std::clamp(static_cast<int>(std::lround(x / 255.0f * max)), 0, max);
++    };
++    return static_cast<u16>((q(c.r, 5) << 11) | (q(c.g, 6) << 5) | q(c.b, 5));
++}
++
++// GX CMPR: 8-byte blocks of two big-endian RGB565 end colours and sixteen
++// 2-bit indices. Only the end colours change; a block keeps its mode (four
++// colours when the first is greater, else three and transparent), swapping
++// its end colours and their indices when the new colours compare the other way.
++void recolorCmpr(u8* data, size_t size, Part part, const Rgb& target) {
++    for (size_t off = 0; off + 8 <= size; off += 8) {
++        u8* block = data + off;
++        const u16 c0 = static_cast<u16>((block[0] << 8) | block[1]);
++        const u16 c1 = static_cast<u16>((block[2] << 8) | block[3]);
++        u16 n0 = to565(recolor(part, from565(c0), target));
++        u16 n1 = to565(recolor(part, from565(c1), target));
++        if (n0 == c0 && n1 == c1) {
++            continue;
++        }
++        if (c0 > c1) {
++            if (n0 == n1) {
++                if (n1 > 0) {
++                    n1--;
++                } else {
++                    n0++;
++                }
++            }
++            if (n0 < n1) {
++                std::swap(n0, n1);
++                for (int i = 4; i < 8; i++) {
++                    block[i] ^= 0x55;  // 0<->1, 2<->3
++                }
++            }
++        } else if (n0 > n1) {
++            std::swap(n0, n1);
++            for (int i = 4; i < 8; i++) {
++                u8 swapped = 0;
++                for (int p = 0; p < 4; p++) {
++                    u8 idx = (block[i] >> (6 - 2 * p)) & 3;
++                    if (idx < 2) {
++                        idx ^= 1;  // the end colours swap; the midpoint and transparent stay
++                    }
++                    swapped |= idx << (6 - 2 * p);
++                }
++                block[i] = swapped;
++            }
++        }
++        block[0] = static_cast<u8>(n0 >> 8);
++        block[1] = static_cast<u8>(n0);
++        block[2] = static_cast<u8>(n1 >> 8);
++        block[3] = static_cast<u8>(n1);
++    }
++}
++
++size_t cmprSize(const ResTIMG& img) {
++    return GXGetTexBufferSize(img.width, img.height, GX_TF_CMPR, img.mipmapEnabled ? GX_TRUE : GX_FALSE,
++                              img.mipmapCount);
++}
++
++// --- Texture tables ------------------------------------------------------------
++
++struct Table {
++    J3DModelData* modelData = nullptr;
++    J3DTexture* original = nullptr;
++    ResTIMG* firstRes = nullptr;
++    u16 num = 0;
++    std::string key;
++    std::unique_ptr<J3DTexture> texture;  // nullptr: nothing in this model changes
++    std::vector<std::unique_ptr<u8[]>> images;
++};
++
++struct Retired {
++    std::unique_ptr<J3DTexture> texture;
++    std::vector<std::unique_ptr<u8[]>> images;
++    int frame;
++};
++
++std::vector<Table> s_tables[2];
++std::vector<Retired> s_retired;
++int s_frame = 0;
++
++// A table's texture objects may still be referenced by commands already queued
++// for the GPU, so a table that is replaced is kept a few frames.
++void retire(Table& table) {
++    if (table.texture != nullptr) {
++        s_retired.push_back(Retired{std::move(table.texture), std::move(table.images), s_frame});
++    }
++    table.images.clear();
++}
++
++void buildTable(Table& table, J3DModelData* modelData, const Palette& palette) {
++    retire(table);
++    J3DTexture* original = modelData->getTexture();
++    table.modelData = modelData;
++    table.original = original;
++    table.num = original->getNum();
++    table.firstRes = original->getResTIMG(0);
++    table.key = palette.key;
++
++    JUTNameTab* names = modelData->getTextureName();
++    std::unique_ptr<J3DTexture> copy;
++    for (u16 i = 0; i < table.num; i++) {
++        const Part part = partOf(names != nullptr ? names->getName(i) : nullptr);
++        const auto& target = palette.of(part);
++        ResTIMG* img = original->getResTIMG(i);
++        if (part == Part::None || !target.has_value() || static_cast<int>(img->format) != GX_TF_CMPR) {
++            continue;
++        }
++        if (copy == nullptr) {
++            copy = std::make_unique<J3DTexture>(table.num, table.firstRes);
++            copy->copyDataPtrs(*original);
++        }
++        const size_t size = cmprSize(*img);
++        auto image = std::make_unique<u8[]>(size);
++        std::memcpy(image.get(), original->getImgDataPtr(i), size);
++        recolorCmpr(image.get(), size, part, *target);
++        copy->setImgDataPtr(i, image.get());
++        table.images.push_back(std::move(image));
++    }
++    table.texture = std::move(copy);
++}
++
++J3DTexture* textureFor(int player, J3DModelData* modelData, const Palette& palette) {
++    J3DTexture* original = modelData->getTexture();
++    if (original == nullptr || original->getNum() == 0) {
++        return original;
++    }
++    auto& tables = s_tables[player];
++    Table* table = nullptr;
++    for (auto& t : tables) {
++        if (t.modelData == modelData) {
++            table = &t;
++            break;
++        }
++    }
++    if (table == nullptr) {
++        table = &tables.emplace_back();
++    }
++    // Rebuilt when the colours change, or when this address now holds other
++    // model data (Link's clothes and wolf models are loaded and freed).
++    if (table->key != palette.key || table->original != original || table->num != original->getNum() ||
++        table->firstRes != original->getResTIMG(0))
++    {
++        buildTable(*table, modelData, palette);
++    }
++    return table->texture != nullptr ? table->texture.get() : original;
++}
++
++void applyToModel(int player, J3DModel* model, const Palette& palette) {
++    if (model == nullptr) {
++        return;
++    }
++    J3DModelData* modelData = model->getModelData();
++    J3DTexture* texture = palette.key.empty() ? modelData->getTexture() : textureFor(player, modelData, palette);
++    for (u16 i = 0; i < modelData->getMaterialNum(); i++) {
++        model->getMatPacket(i)->setTexture(texture);
++    }
++}
++
++void freeRetired(bool all) {
++    std::erase_if(s_retired, [all](const Retired& r) { return all || s_frame - r.frame > 16; });
++}
++
++}  // namespace
++
++void apply(daAlink_c* link, int player) {
++    if (player < 0 || player > 1) {
++        return;
++    }
++    s_frame++;
++    freeRetired(false);
++    const Palette palette = paletteFor(player);
++    if (palette.key.empty() && s_tables[player].empty()) {
++        return;  // never recoloured: the models still point at their own tables
++    }
++    applyToModel(player, link->mpLinkModel, palette);
++    applyToModel(player, link->mpLinkFaceModel, palette);
++    applyToModel(player, link->mpLinkHatModel, palette);
++    applyToModel(player, link->mpLinkHandModel, palette);
++    applyToModel(player, link->mpLinkBootModels[0], palette);
++    applyToModel(player, link->mpLinkBootModels[1], palette);
++}
++
++void onSceneDelete() {
++    for (auto& tables : s_tables) {
++        for (auto& table : tables) {
++            retire(table);
++        }
++        tables.clear();
++    }
++    // The scene's draws are done by the time it is deleted.
++    freeRetired(true);
++}
++
++}  // namespace dusk::splitscreen::colors
+diff --git a/src/dusk/splitscreen_colors.h b/src/dusk/splitscreen_colors.h
+new file mode 100644
+index 0000000..2aa8926
+--- /dev/null
++++ b/src/dusk/splitscreen_colors.h
+@@ -0,0 +1,23 @@
++#pragma once
++
++// Split-screen: each player's own colours for their Link (tunic, skin, wolf
++// fur), so the two Links can be told apart.
++//
++// Link's colours are in his textures (S3TC-compressed, GX CMPR), and on PC a
++// material loads its textures at draw time from its packet's own texture
++// table (J3DMatPacket::mpTexture). So each player's Link gets its own copy of
++// the table, with recoloured copies of the textures that hold the tunic, the
++// skin or the fur; the model data, and everything else, stays shared.
++
++class daAlink_c;
++
++namespace dusk::splitscreen::colors {
++
++// Points this Link's models at its player's texture tables. Called before the
++// Link enters its models into the draw lists (daAlink_c::draw).
++void apply(daAlink_c* link, int player);
++
++// Frees what the old scene's tables hold.
++void onSceneDelete();
++
++}  // namespace dusk::splitscreen::colors
 diff --git a/src/dusk/splitscreen_ctx.h b/src/dusk/splitscreen_ctx.h
 new file mode 100644
 index 0000000..2eaccf4
@@ -2015,21 +2890,61 @@ index 0000000..2eaccf4
 +
 +}  // namespace dusk::splitscreen
 diff --git a/src/dusk/ui/settings.cpp b/src/dusk/ui/settings.cpp
-index 45a710a..a86f02f 100644
+index 45a710a..37d2ea8 100644
 --- a/src/dusk/ui/settings.cpp
 +++ b/src/dusk/ui/settings.cpp
-@@ -1235,6 +1235,15 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
+@@ -5,6 +5,7 @@
+ #include "graphics_tuner.hpp"
+ #include "menu_bar.hpp"
+ #include "modal.hpp"
++#include "color_input.hpp"
+ #include "number_button.hpp"
+ #include "pane.hpp"
+ #include "prelaunch.hpp"
+@@ -1235,6 +1236,47 @@ SettingsWindow::SettingsWindow(bool prelaunch) : mPrelaunch(prelaunch) {
          addOption("Hide Owl Statue Markers", getSettings().game.removeQuestMapMarkers,
              "Removes completed Owl Statue markers from the map and Minimap.");
  
 +        leftPane.add_section("Split-Screen Co-op");
 +        addOption("Two Players", getSettings().game.splitScreen,
 +            "A second Link joins on controller 2, with half of the screen each.<br/>"
-+            "Player 2 is a companion: the story, doors and cutscenes follow Player 1. "
-+            "Player 2 waits out cutscenes and is brought back to Player 1 when they get separated.<br/>"
++            "Either player can talk to people and open things; the scene that follows plays with "
++            "that player's Link. Players are brought back together when they get separated.<br/>"
 +            "Frame interpolation is off while this is on.");
 +        addOption("Stack Views Top and Bottom", getSettings().game.splitScreenTopBottom,
 +            "Splits the screen into a top and a bottom half instead of left and right.");
++        // Split-screen: each player's Link colours. "Default" (an empty value)
++        // leaves that part as the game has it.
++        const auto addLinkColor = [&](const Rml::String& key, ConfigVar<std::string>& value,
++                                      const Rml::String& helpText) {
++            leftPane.register_control(
++                leftPane.add_child<ColorInput>(ColorInput::Props{
++                    .key = key,
++                    .getValue = [&value] { return Rml::String(value.getValue()); },
++                    .setValue =
++                        [&value](Rml::String color) {
++                            value.setValue(color);
++                            config::save();
++                        },
++                    .isDisabled = [] { return !getSettings().game.splitScreen.getValue(); },
++                    .isModified = [&value] { return value.getValue() != value.getDefaultValue(); },
++                }),
++                rightPane, [helpText](Pane& pane) {
++                    pane.clear();
++                    pane.add_rml(helpText);
++                });
++        };
++        static const char* const kTunicHelp =
++            "The colour of this player's clothes: the Hero's tunic and cap, and the green vest "
++            "of the Ordon clothes at the start of the game.";
++        static const char* const kSkinHelp = "This player's skin tone: face, ears, arms and hands.";
++        static const char* const kWolfHelp = "The colour of this player's fur as a wolf.";
++        addLinkColor("Player 1 Tunic", getSettings().game.splitScreenP1Tunic, kTunicHelp);
++        addLinkColor("Player 1 Skin", getSettings().game.splitScreenP1Skin, kSkinHelp);
++        addLinkColor("Player 1 Wolf Fur", getSettings().game.splitScreenP1Wolf, kWolfHelp);
++        addLinkColor("Player 2 Tunic", getSettings().game.splitScreenP2Tunic, kTunicHelp);
++        addLinkColor("Player 2 Skin", getSettings().game.splitScreenP2Skin, kSkinHelp);
++        addLinkColor("Player 2 Wolf Fur", getSettings().game.splitScreenP2Wolf, kWolfHelp);
 +
          leftPane.add_section("Difficulty");
          leftPane.register_control(
@@ -2255,7 +3170,7 @@ index f2f4216..aac240a 100644
      return isStop();
  }
 diff --git a/src/m_Do/m_Do_graphic.cpp b/src/m_Do/m_Do_graphic.cpp
-index 6bc98b2..ea2ff75 100644
+index 6bc98b2..cf791ff 100644
 --- a/src/m_Do/m_Do_graphic.cpp
 +++ b/src/m_Do/m_Do_graphic.cpp
 @@ -59,6 +59,7 @@
@@ -2364,7 +3279,7 @@ index 6bc98b2..ea2ff75 100644
  int mDoGph_Painter() {
      ZoneScoped;
  
-@@ -2229,8 +2321,26 @@ int mDoGph_Painter() {
+@@ -2229,8 +2321,29 @@ int mDoGph_Painter() {
      #endif
  
      if (dComIfGp_getWindowNum() != 0) {
@@ -2383,7 +3298,10 @@ index 6bc98b2..ea2ff75 100644
 +            }
 +        }
 +        dDlst_window_c* window_p = dComIfGp_getWindow(window_no);
-+        int camera_id = dusk::splitscreen::remapCamera(window_p->getCameraID());
++        // The physical camera of this view (the lead's when the screen is not
++        // split), as the index that dComIfGp_getCamera maps back to it.
++        const int physicalCamera = windowCount > 1 ? window_p->getCameraID() : dusk::splitscreen::lead();
++        int camera_id = dusk::splitscreen::remapCamera(physicalCamera);
 +#else
          dDlst_window_c* window_p = dComIfGp_getWindow(0);
          int camera_id = window_p->getCameraID();
@@ -2391,7 +3309,7 @@ index 6bc98b2..ea2ff75 100644
          camera_process_class* camera_p = dComIfGp_getCamera(camera_id);
  
          if (camera_p != NULL) {
-@@ -2676,7 +2786,8 @@ int mDoGph_Painter() {
+@@ -2676,7 +2789,8 @@ int mDoGph_Painter() {
                  trimming(&camera_p->view, view_port);
  
                  if (strcmp(dComIfGp_getStartStageName(), "F_SP127") != 0 &&
@@ -2401,7 +3319,7 @@ index 6bc98b2..ea2ff75 100644
                  {
                      mDoGph_gInf_c::calcFade();
                  }
-@@ -2687,6 +2798,16 @@ int mDoGph_Painter() {
+@@ -2687,6 +2801,16 @@ int mDoGph_Painter() {
                  #endif
              }
          }

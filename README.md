@@ -22,14 +22,23 @@ supported by it: please do not take PS5 problems to them.
 
 This fork adds local two-player split-screen. A second Link plays on
 controller 2, and each player gets half of the screen with their own camera.
-The story and the game are unchanged: Player 2 is a companion. Enemies,
-doors, events and cutscenes follow Player 1. Player 2 waits out cutscenes, and
-is brought back next to Player 1 when they get separated.
+The story and the game are unchanged.
+
+- **Either player can move the story on.** Whoever talks to someone, opens a
+  door or a chest, gets an item or pauses becomes the lead. The world follows
+  the lead until the other player does one of those. During cutscenes the
+  other player waits, and the lead's view fills the screen.
+- **Each player's colours.** Tunic, skin and wolf fur, for each player.
+  Player 2 starts in red.
+- **Two horses.** When Epona is out, Player 2 gets a horse of their own, and
+  the screen stays split while riding.
+- **Wolf form.** Player 2 becomes a wolf with Player 1.
+- Players who get separated are brought back together.
 
 It is off by default. Turn it on in **Settings → Gameplay → Split-Screen Co-op →
-Two Players**. **Stack Views Top and Bottom** splits the screen the other way.
-On the PS5, controller 2 is the controller of the second user signed in; a
-guest user works.
+Two Players**. The colours and **Stack Views Top and Bottom** are in the same
+section. On the PS5, controller 2 is the controller of the second user signed
+in; a guest user works.
 
 The change is one patch, `ps5/patches/splitscreen.patch`, applied after the
 console's own by `setup-source.sh`. Once applied, it is described in
@@ -37,8 +46,8 @@ console's own by `setup-source.sh`. Once applied, it is described in
 
 | | Seen | Not yet verified |
 | --- | --- | --- |
-| macOS (Apple Silicon) | Both views drawn; Player 2 moving, swinging the sword and following through a stage change; the leash bringing Player 2 back repeatedly; one-player play unchanged with it off. Player 2 was driven by scripted input. | A real second controller |
-| PS5 | Built with `ps5/docker/run.sh` (2026-10-18, at the driver and SDK revisions of the v1.0.0 release) and copied to one console | Starting it there; everything on the console |
+| macOS (Apple Silicon) | Both views drawn; Player 2 moving, swinging the sword and following through a stage change; the leash bringing Player 2 back repeatedly; one-player play unchanged with it off. Colours on both outfits and the wolf; Player 2 talking to an NPC and leading, then Player 1 leading again; Player 2 pausing; both players on their own horse. The players were driven by scripted input. | A real second controller on macOS; doors and chests opened by Player 2; Midna and the twilight sections |
+| PS5 | The first version (without colours, leading or horses): built with `ps5/docker/run.sh` on 2026-10-18 and played on one console with two controllers | This version on the console |
 
 Known limits:
 
@@ -46,9 +55,10 @@ Known limits:
   30 fps.
 - The HUD is shared: hearts and the map show on the left half, the action
   buttons on the right.
-- Boss fights and other scripted cameras move Player 1's camera only.
-- While Player 1 is a wolf or riding, Player 2 is hidden, including during the
-  twilight sections.
+- Boss fights and other scripted cameras move the lead's camera only.
+- Only Player 1 transforms, and only Player 1's hits cost hearts.
+- Story triggers you walk into (rather than interact with) only notice the
+  lead.
 
 ## Status
 
